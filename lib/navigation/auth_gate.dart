@@ -34,8 +34,10 @@ class AuthGate extends StatelessWidget {
                   body: Center(child: CircularProgressIndicator()),
                 );
               }
+              // Sur la branche dev : toutes les fonctionnalités disponibles sur web
+              // Sur main : web en lecture seule pour la production
               return kIsWeb
-                  ? const DashboardScreen(readOnly: true)
+                  ? const MainNavigator() // Toutes les fonctionnalités sur web (dev)
                   : const MainNavigator();
             },
           );
