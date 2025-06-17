@@ -1,0 +1,33 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "kartingapp-fef5c",
+          "appId": "1:722294939381:android:6f8ce0416eedd7a37a6fbc",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "kartingapp-fef5c",
+          "configurations": {
+            "android": "1:722294939381:android:6f8ce0416eedd7a37a6fbc",
+            "ios": "1:722294939381:ios:af55b8d380f249b67a6fbc",
+            "macos": "1:722294939381:ios:af55b8d380f249b67a6fbc",
+            "web": "1:722294939381:web:1e2e3b8f3ba0f3177a6fbc",
+            "windows": "1:722294939381:web:e50b6ca909f014237a6fbc"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}

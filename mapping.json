@@ -1,0 +1,182 @@
+{
+  "RKC Practice": {
+    "url": "https://www.apex-timing.com/live-timing/rkc/",
+    "wssUrl": "wss://www.apex-timing.com:7913/",
+    "mapping": {
+      "C1": "",
+      "C2": "",
+      "C3": "Clt",
+      "C4": "Kart",
+      "C5": "Equipe/Pilote",
+      "C6": "Ecart",
+      "C7": "Intervalles",
+      "C8": "Meilleur T.",
+      "C9": "S1",
+      "C10": "S2",
+      "C11": "S3",
+      "C12": "Dernier T.",
+      "C13": "Stands",
+      "C14": "Penalites"
+    }
+  },
+  "RKC Q": {
+    "url": "https://www.apex-timing.com/live-timing/rkc/",
+    "wssUrl": "wss://www.apex-timing.com:7913/",
+    "mapping": {
+      "C1": "",
+      "C2": "Clt",
+      "C3": "Kart",
+      "C4": "Equipe/Pilote",
+      "C5": "S1",
+      "C6": "S2",
+      "C7": "S3",
+      "C8": "Dernier T.",
+      "C9": "Meilleur T.",
+      "C10": "Ecart",
+      "C11": "Lap",
+      "C12": "En Piste",
+      "C13": "Stands",
+      "C14": ""
+    }
+  },
+  "RKC Race": {
+    "url": "https://www.apex-timing.com/live-timing/rkc/",
+    "wssUrl": "wss://www.apex-timing.com:7913/",
+    "mapping": {
+      "C1": "",
+      "C2": "",
+      "C3": "Clt",
+      "C4": "Kart",
+      "C5": "Equipe/Pilote",
+      "C6": "Ecart",
+      "C7": "Intervalles",
+      "C8": "Meilleur T.",
+      "C9": "S1",
+      "C10": "S2",
+      "C11": "S3",
+      "C12": "Dernier T.",
+      "C13": "Stands",
+      "C14": "Penalites"
+    }
+  },
+  "Campillos Practice": {
+    "url": "https://www.apex-timing.com/live-timing/kartcenter-campillos/index.html?language=en&iframe_id=iFrameResizer0",
+    "wssUrl": "wss://www.apex-timing.com:9373/",
+    "mapping": {
+      "C1": "Clt",
+      "C2": "Equipe/Pilote",
+      "C3": "Dernier T.",
+      "C4": "Ecart",
+      "C5": "Stands",
+      "C6": "Kart",
+      "C7": "Meilleur T.",
+      "C8": "S1",
+      "C9": "S2",
+      "C10": "S3",
+      "C11": "Intervalles",
+      "C12": "Lap",
+      "C13": "En Piste",
+      "C14": "Categorie"
+    }
+  },
+  "Campillos Q": {
+    "url": "https://www.apex-timing.com/live-timing/kartcenter-campillos/index.html?language=en&iframe_id=iFrameResizer0",
+    "wssUrl": "wss://www.apex-timing.com:9373/",
+    "mapping": {
+      "C1": "Clt",
+      "C2": "Equipe/Pilote",
+      "C3": "Dernier T.",
+      "C4": "Ecart",
+      "C5": "Stands",
+      "C6": "Kart",
+      "C7": "Meilleur T.",
+      "C8": "S1",
+      "C9": "S2",
+      "C10": "S3",
+      "C11": "Intervalles",
+      "C12": "Lap",
+      "C13": "En Piste",
+      "C14": "Categorie"
+    }
+  },
+  "Campillos Race": {
+    "url": "https://www.apex-timing.com/live-timing/kartcenter-campillos/index.html?language=en&iframe_id=iFrameResizer0",
+    "wssUrl": "wss://www.apex-timing.com:9373/",
+    "mapping": {
+      "C1": "Clt",
+      "C2": "Equipe/Pilote",
+      "C3": "Dernier T.",
+      "C4": "Ecart",
+      "C5": "Stands",
+      "C6": "Kart",
+      "C7": "Meilleur T.",
+      "C8": "S1",
+      "C9": "S2",
+      "C10": "S3",
+      "C11": "Intervalles",
+      "C12": "Lap",
+      "C13": "En Piste",
+      "C14": "Categorie"
+    }
+  },
+  "Essay Practice": {
+    "url": "https://www.apex-timing.com/live-timing/ouestkarting/",
+    "wssUrl": "wss://www.apex-timing.com:7983/",
+    "mapping": {
+      "C1": "",
+      "C2": "",
+      "C3": "",
+      "C4": "Clt",
+      "C5": "Kart",
+      "C6": "Equipe/Pilote",
+      "C7": "Dernier T.",
+      "C8": "Meilleur T.",
+      "C9": "Ecart",
+      "C10": "Lap",
+      "C11": "En Piste",
+      "C12": "Stands",
+      "C13": "",
+      "C14": ""
+    }
+  },
+  "Essay Q": {
+    "url": "https://www.apex-timing.com/live-timing/ouestkarting/",
+    "wssUrl": "wss://www.apex-timing.com:7983/",
+    "mapping": {
+      "C1": "",
+      "C2": "",
+      "C3": "",
+      "C4": "Clt",
+      "C5": "Kart",
+      "C6": "Equipe/Pilote",
+      "C7": "Dernier T.",
+      "C8": "Meilleur T.",
+      "C9": "Ecart",
+      "C10": "Lap",
+      "C11": "En Piste",
+      "C12": "Stands",
+      "C13": "",
+      "C14": ""
+    }
+  },
+  "Essay Race": {
+    "url": "https://www.apex-timing.com/live-timing/ouestkarting/",
+    "wssUrl": "wss://www.apex-timing.com:7983/",
+    "mapping": {
+      "C1": "",
+      "C2": "",
+      "C3": "",
+      "C4": "Clt",
+      "C5": "Kart",
+      "C6": "Equipe/Pilote",
+      "C7": "Dernier T.",
+      "C8": "Meilleur T.",
+      "C9": "Ecart",
+      "C10": "Lap",
+      "C11": "En Piste",
+      "C12": "Stands",
+      "C13": "",
+      "C14": ""
+    }
+  }
+}
