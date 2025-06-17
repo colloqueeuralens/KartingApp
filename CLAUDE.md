@@ -160,23 +160,51 @@ Firebase options are auto-generated in `lib/firebase_options.dart`.
 
 ### Repository Information
 - **GitHub Repository**: https://github.com/colloqueeuralens/KartingApp
-- **Default Branch**: `main`
+- **Main Branch**: `main` (production-ready code)
+- **Development Branch**: `dev` (active development)
 - **Remote**: `origin`
 
 ### Git Workflow Best Practices
 
-#### Making Changes
-1. **Before starting work**: Always pull latest changes
+#### Branch Strategy
+- **`main`**: Production-ready, stable code only
+- **`dev`**: Active development, new features, and fixes
+- **Feature branches**: For larger features (optional)
+
+#### Development Workflow
+1. **Switch to dev branch** for all development work:
    ```bash
-   git pull origin main
+   git checkout dev
+   git pull origin dev
    ```
 
-2. **After making changes**: Stage, commit, and push
+2. **Develop features** on the dev branch:
    ```bash
+   # Make your changes
    git add .
-   git commit -m "Descriptive commit message"
+   git commit -m "feat: descriptive commit message"
+   git push origin dev
+   ```
+
+3. **Merge to main** when features are stable and tested:
+   ```bash
+   git checkout main
+   git pull origin main
+   git merge dev
    git push origin main
    ```
+
+#### Quick Development Commands
+```bash
+# Start working on new feature
+git checkout dev
+git pull origin dev
+
+# After making changes
+git add .
+git commit -m "feat: your feature description"
+git push origin dev
+```
 
 #### Commit Message Convention
 Use clear, descriptive commit messages following this pattern:
@@ -205,12 +233,17 @@ build/
 ```
 
 ### Development Workflow
-1. Pull latest changes from GitHub
-2. Make code modifications
-3. Test changes locally with `flutter run`
-4. Update CLAUDE.md if architecture changes
-5. Commit changes with descriptive message
-6. Push to GitHub for backup and collaboration
+1. **Switch to dev branch**: `git checkout dev && git pull origin dev`
+2. **Make code modifications** on dev branch
+3. **Test changes locally** with `flutter run`
+4. **Update CLAUDE.md** if architecture changes
+5. **Commit and push to dev**: Regular commits for incremental progress
+6. **Merge to main**: Only when features are complete and stable
+
+### Branch Protection Strategy
+- **`main`**: Only stable, tested code
+- **`dev`**: Active development, frequent commits encouraged
+- **Pull Requests**: Consider using PRs for `dev` → `main` merges for better tracking
 
 ### Repository Structure
 The repository contains the complete Flutter application with:
