@@ -155,3 +155,68 @@ Firebase options are auto-generated in `lib/firebase_options.dart`.
 - ✅ Multi-platform support
 - 🚧 Live timing integration (planned)
 - ❌ Test coverage
+
+## Git Workflow & Repository Management
+
+### Repository Information
+- **GitHub Repository**: https://github.com/colloqueeuralens/KartingApp
+- **Default Branch**: `main`
+- **Remote**: `origin`
+
+### Git Workflow Best Practices
+
+#### Making Changes
+1. **Before starting work**: Always pull latest changes
+   ```bash
+   git pull origin main
+   ```
+
+2. **After making changes**: Stage, commit, and push
+   ```bash
+   git add .
+   git commit -m "Descriptive commit message"
+   git push origin main
+   ```
+
+#### Commit Message Convention
+Use clear, descriptive commit messages following this pattern:
+- `feat: add new feature description`
+- `fix: resolve specific issue`
+- `update: improve existing functionality`
+- `refactor: restructure code without changing behavior`
+- `docs: update documentation`
+
+#### Security Notes
+- ✅ Firebase configuration files are excluded via `.gitignore`
+- ✅ Sensitive keys and tokens are not committed
+- ✅ Only source code and documentation are tracked
+
+#### Files Excluded from Git
+```
+# Firebase configuration (contains sensitive keys)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+.firebase/
+
+# Build artifacts
+build/
+.dart_tool/
+```
+
+### Development Workflow
+1. Pull latest changes from GitHub
+2. Make code modifications
+3. Test changes locally with `flutter run`
+4. Update CLAUDE.md if architecture changes
+5. Commit changes with descriptive message
+6. Push to GitHub for backup and collaboration
+
+### Repository Structure
+The repository contains the complete Flutter application with:
+- Source code (`lib/` directory)
+- Platform configurations (`android/`, `ios/`)
+- Dependencies (`pubspec.yaml`)
+- Documentation (`CLAUDE.md`, `README.md`)
+- Firebase configuration (`firebase.json`)
+- Build configuration (`analysis_options.yaml`)
