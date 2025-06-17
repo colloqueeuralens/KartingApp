@@ -93,8 +93,14 @@ The app includes a comprehensive circuit management system:
 - **Circuit Selection**: Links sessions to specific circuits for live timing
 
 ### Platform-Specific Behavior
+#### Development Branch (`dev`)
 - **Mobile**: Full functionality including configuration and circuit management
-- **Web**: Read-only dashboard mode with circuit name display
+- **Web**: Full functionality - all features available for development and testing
+- **Responsive**: Uses `kIsWeb` to detect platform and adjust UI accordingly
+
+#### Production Branch (`main`)
+- **Mobile**: Full functionality including configuration and circuit management  
+- **Web**: Read-only dashboard mode with circuit name display (production safety)
 - **Responsive**: Uses `kIsWeb` to detect platform and adjust UI accordingly
 
 ### Navigation System
@@ -241,9 +247,18 @@ build/
 6. **Merge to main**: Only when features are complete and stable
 
 ### Branch Protection Strategy
-- **`main`**: Only stable, tested code
-- **`dev`**: Active development, frequent commits encouraged
+- **`main`**: Only stable, tested code (web in read-only mode for production)
+- **`dev`**: Active development, frequent commits encouraged (all features on web and mobile)
 - **Pull Requests**: Consider using PRs for `dev` → `main` merges for better tracking
+
+### Platform Feature Availability
+#### On `dev` branch:
+- ✅ **Mobile**: All features (config, circuits, kart management, live timing)
+- ✅ **Web**: All features (config, circuits, kart management, live timing)
+
+#### On `main` branch:
+- ✅ **Mobile**: All features (config, circuits, kart management, live timing)  
+- ⚠️ **Web**: Read-only dashboard only (production safety)
 
 ### Repository Structure
 The repository contains the complete Flutter application with:
