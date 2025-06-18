@@ -3,22 +3,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/common/app_bar_actions.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
+import '../../theme/racing_theme.dart';
 import '../circuit/create_circuit_screen.dart';
 
-/// Écran de configuration (mobile uniquement)
+/// Écran de configuration avec design racing et interface multi-étapes
 class ConfigScreen extends StatefulWidget {
   final VoidCallback? onConfigSaved;
 
   const ConfigScreen({super.key, this.onConfigSaved});
-  
+
   @override
   State<ConfigScreen> createState() => _ConfigScreenState();
 }
 
-class _ConfigScreenState extends State<ConfigScreen> {
+class _ConfigScreenState extends State<ConfigScreen>
+    with TickerProviderStateMixin {
   int _numColumns = 3, _numRows = 3;
   bool _loading = false;
   String? _selectedCircuitId;
+  int _currentStep = 0;
+
+  late AnimationController _stepController;
+  late Animation<double> _stepAnimation;
 
   final Map<String, Color> _availableColors = {
     'Bleu': Colors.blue,
@@ -32,13 +38,29 @@ class _ConfigScreenState extends State<ConfigScreen> {
   @override
   void initState() {
     super.initState();
+
+    _stepController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _stepAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _stepController, curve: Curves.easeInOut),
+    );
+
     _loadConfiguration();
+    _stepController.forward();
+  }
+
+  @override
+  void dispose() {
+    _stepController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConfiguration() async {
     try {
       final doc = await SessionService.getSession();
-      
+
       if (doc.exists && mounted) {
         final data = doc.data()!;
         setState(() {
@@ -61,7 +83,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   Future<void> _showJsonImportDialog() async {
     final controller = TextEditingController();
-    
+
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -98,7 +120,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   );
                   return;
                 }
-                
+
                 Navigator.of(context).pop();
                 await _importJsonContent(jsonContent);
               },
@@ -114,33 +136,36 @@ class _ConfigScreenState extends State<ConfigScreen> {
     try {
       print('Début de l\'import JSON...');
       print('Taille du contenu: ${jsonContent.length} caractères');
-      
+
       setState(() => _loading = true);
-      
+
       final result = await CircuitService.importCircuitsFromJson(jsonContent);
       final importedCount = result['imported']!;
       final skippedCount = result['skipped']!;
-      
+
       print('Import terminé avec succès');
-      
+
       if (mounted) {
         String message;
         Color backgroundColor;
-        
+
         if (importedCount > 0 && skippedCount == 0) {
-          message = '$importedCount circuit${importedCount > 1 ? 's' : ''} importé${importedCount > 1 ? 's' : ''} avec succès!';
+          message =
+              '$importedCount circuit${importedCount > 1 ? 's' : ''} importé${importedCount > 1 ? 's' : ''} avec succès!';
           backgroundColor = Colors.green;
         } else if (importedCount > 0 && skippedCount > 0) {
-          message = '$importedCount circuit${importedCount > 1 ? 's' : ''} importé${importedCount > 1 ? 's' : ''}, $skippedCount ignoré${skippedCount > 1 ? 's' : ''} (doublons)';
+          message =
+              '$importedCount circuit${importedCount > 1 ? 's' : ''} importé${importedCount > 1 ? 's' : ''}, $skippedCount ignoré${skippedCount > 1 ? 's' : ''} (doublons)';
           backgroundColor = Colors.orange;
         } else if (importedCount == 0 && skippedCount > 0) {
-          message = 'Aucun circuit importé - tous sont des doublons ($skippedCount ignorés)';
+          message =
+              'Aucun circuit importé - tous sont des doublons ($skippedCount ignorés)';
           backgroundColor = Colors.orange;
         } else {
           message = 'Aucun circuit trouvé dans le fichier JSON';
           backgroundColor = Colors.grey;
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
@@ -152,7 +177,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
     } catch (e, stackTrace) {
       print('Erreur lors de l\'import: $e');
       print('Stack trace: $stackTrace');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -167,206 +192,644 @@ class _ConfigScreenState extends State<ConfigScreen> {
     }
   }
 
+  void _nextStep() {
+    if (_currentStep < 2) {
+      setState(() => _currentStep++);
+      _stepController.reset();
+      _stepController.forward();
+    }
+  }
+
+  void _previousStep() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+      _stepController.reset();
+      _stepController.forward();
+    }
+  }
+
+  Widget _buildStepIndicator() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      child: Row(
+        children: List.generate(3, (index) {
+          final isActive = index <= _currentStep;
+          final isCurrent = index == _currentStep;
+
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: Column(
+                children: [
+                  Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? Colors.grey.shade600
+                          : Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    ['Configuration', 'Circuit', 'Validation'][index],
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isCurrent
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: isActive
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildStep1() {
+    return AnimatedBuilder(
+      animation: _stepAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(50 * (1 - _stepAnimation.value), 0),
+          child: Opacity(
+            opacity: _stepAnimation.value,
+            child: Column(
+              children: [
+                // Configuration de la grille
+                Card(
+                  margin: const EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.grid_view,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Configuration de la grille',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Nombre de colonnes
+                        const Text(
+                          'Nombre de colonnes :',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: _numColumns,
+                              isExpanded: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              items: [2, 3, 4].map((n) {
+                                return DropdownMenuItem(
+                                  value: n,
+                                  child: Text('$n colonne${n > 1 ? 's' : ''}'),
+                                );
+                              }).toList(),
+                              onChanged: (v) => setState(() {
+                                _numColumns = v!;
+                                _columnColors = List.generate(
+                                  _numColumns,
+                                  (i) => i < _columnColors.length
+                                      ? _columnColors[i]
+                                      : _availableColors.keys.first,
+                                );
+                              }),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Karts par colonne
+                        const Text(
+                          'Karts par colonne :',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              value: _numRows,
+                              isExpanded: true,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              items: [1, 2, 3].map((n) {
+                                return DropdownMenuItem(
+                                  value: n,
+                                  child: Text('$n kart${n > 1 ? 's' : ''}'),
+                                );
+                              }).toList(),
+                              onChanged: (v) => setState(() => _numRows = v!),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Couleurs des colonnes
+                        const Text(
+                          'Couleurs des colonnes :',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...List.generate(_numColumns, (i) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Colonne ${i + 1} :',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _columnColors[i],
+                                        isExpanded: true,
+                                        items: _availableColors.keys.map((
+                                          name,
+                                        ) {
+                                          return DropdownMenuItem(
+                                            value: name,
+                                            child: Text(name),
+                                          );
+                                        }).toList(),
+                                        onChanged: (v) => setState(
+                                          () => _columnColors[i] = v!,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: _availableColors[_columnColors[i]],
+                                      border: Border.all(
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStep2() {
+    return AnimatedBuilder(
+      animation: _stepAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(50 * (1 - _stepAnimation.value), 0),
+          child: Opacity(
+            opacity: _stepAnimation.value,
+            child: Column(
+              children: [
+                Card(
+                  margin: const EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.track_changes,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Sélection du circuit',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: CircuitService.getCircuitsStream(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return Text('Erreur: ${snapshot.error}');
+                            }
+                            if (!snapshot.hasData) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+
+                            final circuits = snapshot.data!.docs;
+
+                            return Column(
+                              children: [
+                                // Dropdown circuit
+                                Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      isExpanded: true,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
+                                      hint: const Text(
+                                        'Sélectionner un circuit',
+                                      ),
+                                      value:
+                                          circuits.any(
+                                            (doc) =>
+                                                doc.id == _selectedCircuitId,
+                                          )
+                                          ? _selectedCircuitId
+                                          : null,
+                                      items: circuits.map((doc) {
+                                        return DropdownMenuItem(
+                                          value: doc.id,
+                                          child: Text(
+                                            doc.data()['nom'] ??
+                                                'Circuit sans nom',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _selectedCircuitId = value;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // Boutons d'action
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const CreateCircuitScreen(),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Nouveau circuit'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: _loading
+                                            ? null
+                                            : _showJsonImportDialog,
+                                        icon: const Icon(Icons.upload_file),
+                                        label: const Text('Import JSON'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStep3() {
+    return AnimatedBuilder(
+      animation: _stepAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(50 * (1 - _stepAnimation.value), 0),
+          child: Opacity(
+            opacity: _stepAnimation.value,
+            child: Column(
+              children: [
+                Card(
+                  margin: const EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.check_circle,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Validation de la configuration',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Résumé de la configuration
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Résumé de votre configuration :',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                '• Grille: $_numColumns colonnes × $_numRows karts',
+                              ),
+                              Text('• Couleurs: ${_columnColors.join(', ')}'),
+                              if (_selectedCircuitId != null)
+                                FutureBuilder<String?>(
+                                  future: CircuitService.getCircuitName(
+                                    _selectedCircuitId!,
+                                  ),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasData) {
+                                      return Text(
+                                        '• Circuit: ${snapshot.data}',
+                                      );
+                                    }
+                                    return const Text(
+                                      '• Circuit: Chargement...',
+                                    );
+                                  },
+                                )
+                              else
+                                const Text('• Circuit: Aucun sélectionné'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('KMRS Racing'),
-        automaticallyImplyLeading: false,
-        actions: AppBarActions.getActions(context),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            const Text('Nombre de colonnes :', style: TextStyle(fontSize: 16)),
-            DropdownButton<int>(
-              value: _numColumns,
-              items: [2, 3, 4]
-                  .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
-                  .toList(),
-              onChanged: (v) => setState(() {
-                _numColumns = v!;
-                _columnColors = List.generate(
-                  _numColumns,
-                  (i) => i < _columnColors.length
-                      ? _columnColors[i]
-                      : _availableColors.keys.first,
-                );
-              }),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Couleurs des colonnes :',
-              style: TextStyle(fontSize: 16),
-            ),
-            ...List.generate(_numColumns, (i) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Text('Colonne ${i + 1} :'),
-                    const SizedBox(width: 12),
-                    DropdownButton<String>(
-                      value: _columnColors[i],
-                      items: _availableColors.keys
-                          .map(
-                            (name) => DropdownMenuItem(
-                              value: name,
-                              child: Text(name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _columnColors[i] = v!),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: _availableColors[_columnColors[i]],
-                        border: Border.all(),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
-            const Text('Karts par colonne :', style: TextStyle(fontSize: 16)),
-            DropdownButton<int>(
-              value: _numRows,
-              items: [1, 2, 3]
-                  .map(
-                    (n) => DropdownMenuItem(
-                      value: n,
-                      child: Text('$n kart${n > 1 ? 's' : ''}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _numRows = v!),
-            ),
-            const SizedBox(height: 24),
-            // Section Circuit
-            const Text('Circuit :', style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 8),
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: CircuitService.getCircuitsStream(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Text('Erreur: ${snapshot.error}');
-                }
-                if (!snapshot.hasData) {
-                  return const CircularProgressIndicator();
-                }
-                
-                final circuits = snapshot.data!.docs;
-                
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            hint: const Text('Sélectionner un circuit'),
-                            value: circuits.any((doc) => doc.id == _selectedCircuitId) 
-                                ? _selectedCircuitId 
-                                : null,
-                            items: [
-                              ...circuits.map((doc) => DropdownMenuItem(
-                                    value: doc.id,
-                                    child: Text(
-                                      doc.data()['nom'] ?? 'Circuit sans nom',
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  )),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedCircuitId = value;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const CreateCircuitScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.add),
-                          label: const Text('Nouveau'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _loading ? null : _showJsonImportDialog,
-                            icon: const Icon(Icons.paste),
-                            label: const Text('Importer circuits (JSON)'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-            Center(
-              child: ElevatedButton(
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        setState(() => _loading = true);
-                        try {
-                          // 1) Sauvegarde de la config
-                          await SessionService.updateConfiguration(
-                            numColumns: _numColumns,
-                            numRows: _numRows,
-                            columnColors: _columnColors,
-                            selectedCircuitId: _selectedCircuitId,
-                          );
-
-                          // 2) Réinitialisation des karts
-                          await SessionService.clearKartEntries(_numColumns);
-
-                          // 3) Navigation via callback
-                          if (widget.onConfigSaved != null) {
-                            widget.onConfigSaved!();
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Erreur: $e')),
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => _loading = false);
-                        }
-                      },
-                child: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Valider'),
-              ),
-            ),
+            const Icon(Icons.settings, color: Colors.white),
+            const SizedBox(width: 8),
+            const Text('Configuration Racing'),
           ],
         ),
+        automaticallyImplyLeading: false,
+        actions: AppBarActions.getResponsiveActions(context),
+      ),
+      body: Column(
+        children: [
+          // Indicateur d'étapes
+          _buildStepIndicator(),
+
+          // Contenu de l'étape actuelle
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  if (_currentStep == 0) _buildStep1(),
+                  if (_currentStep == 1) _buildStep2(),
+                  if (_currentStep == 2) _buildStep3(),
+                ],
+              ),
+            ),
+          ),
+
+          // Boutons de navigation
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                if (_currentStep > 0)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _previousStep,
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Précédent'),
+                    ),
+                  ),
+
+                if (_currentStep > 0) const SizedBox(width: 16),
+
+                Expanded(
+                  child: _currentStep < 2
+                      ? ElevatedButton.icon(
+                          onPressed: _nextStep,
+                          icon: const Icon(Icons.arrow_forward),
+                          label: const Text('Suivant'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: RacingTheme.racingGreen,
+                            foregroundColor: Colors.white,
+                          ),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: _loading
+                              ? null
+                              : () async {
+                                  setState(() => _loading = true);
+                                  try {
+                                    await SessionService.updateConfiguration(
+                                      numColumns: _numColumns,
+                                      numRows: _numRows,
+                                      columnColors: _columnColors,
+                                      selectedCircuitId: _selectedCircuitId,
+                                    );
+                                    await SessionService.clearKartEntries(
+                                      _numColumns,
+                                    );
+
+                                    if (widget.onConfigSaved != null) {
+                                      widget.onConfigSaved!();
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.error,
+                                                color: Colors.white,
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text('Erreur: $e'),
+                                              ),
+                                            ],
+                                          ),
+                                          backgroundColor: RacingTheme.bad,
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted)
+                                      setState(() => _loading = false);
+                                  }
+                                },
+                          icon: _loading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(Icons.check),
+                          label: Text(_loading ? 'Validation...' : 'Valider'),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
