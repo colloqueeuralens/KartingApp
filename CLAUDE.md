@@ -22,11 +22,18 @@ This is a Flutter application called "KMRS Racing" - a karting management system
 - `firebase deploy --only hosting` - Deploy web version to Firebase Hosting
 - `firebase emulators:start` - Start Firebase emulators for local development
 
+### Backend Commands (FastAPI)
+- `cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000` - Run backend in development mode
+- `cd backend && python -m pytest` - Run backend tests
+- `cd backend && python -m py_compile app/main.py` - Check Python syntax
+- `cd backend && pip install -r requirements.txt` - Install backend dependencies
+
 ## Architecture
 
 ### Core Application Structure
 The app follows a modular service-based architecture with proper separation of concerns:
 
+**Frontend (Flutter):**
 ```
 lib/
 ├── main.dart                    # Application entry point
@@ -38,14 +45,39 @@ lib/
 │   ├── circuit/                # Circuit management
 │   ├── config/                 # Session configuration
 │   ├── dashboard/              # Main kart tracking
-│   └── live_timing/            # Live timing (planned)
+│   └── live_timing/            # Live timing interface
 ├── services/                    # Business logic services
 │   ├── circuit_service.dart    # Circuit management
 │   ├── firebase_service.dart   # Firebase integration
 │   └── session_service.dart    # Session management
+├── theme/                       # UI theming
+│   └── racing_theme.dart       # Material Design 3 theme
 └── widgets/                     # Reusable UI components
     ├── common/                 # Shared widgets
     └── dashboard/              # Dashboard-specific widgets
+```
+
+**Backend (FastAPI + Python):**
+```
+backend/
+├── app/
+│   ├── main.py                 # FastAPI application and endpoints
+│   ├── analyzers/              # Data analysis and processing
+│   │   ├── karting_parser.py   # Specialized karting message parser
+│   │   └── format_analyzer.py  # Generic format analysis
+│   ├── models/                 # Data models
+│   │   └── karting_data.py     # Pydantic models for karting data
+│   ├── services/               # Business logic services
+│   │   ├── websocket_manager.py    # WebSocket connection management
+│   │   ├── driver_state_manager.py # Hybrid data state management
+│   │   ├── html_scraper.py         # HTML scraping for static data
+│   │   ├── firebase_sync.py        # Firebase integration
+│   │   └── database_service.py     # Database operations
+│   ├── collectors/             # Data collection
+│   │   └── base_collector.py   # WebSocket data collectors
+│   └── core/                   # Core configuration
+│       ├── config.py           # Application configuration
+│       └── database.py         # Database initialization
 ```
 
 #### Key Components
@@ -127,11 +159,36 @@ The app calculates an "optimal moment" indicator based on performance thresholds
 Shows green "C'EST LE MOMENT!" when percentage of good performances (++ or +) meets threshold.
 Implementation: `lib/widgets/dashboard/kart_grid_view.dart:138-144`
 
-### Live Timing Integration (Planned)
-- WebSocket connections for real-time data
-- HTTP endpoints for timing data retrieval
-- C1-C14 column mapping system for data association
-- Placeholder screen implemented at `lib/screens/live_timing/live_timing_screen.dart`
+### Live Timing Integration - SIMPLIFIED ARCHITECTURE ✅
+**Direct WebSocket → KartingParser Flow**
+- **Karting Message Parser** (`backend/app/analyzers/karting_parser.py`): Specialized parser for dual format support:
+  - **HTML Grid Format**: Initial composite messages with `grid||<tbody>...` containing complete driver data
+  - **Pipe Format**: Real-time updates in `r{driver_id}c{column}|code|value` format
+- **Base Collector** (`backend/app/collectors/base_collector.py`): Simplified WebSocket listener that sends raw messages directly to karting parser
+- **WebSocket Manager** (`backend/app/services/websocket_manager.py`): Direct processing without complex callbacks or state management
+- **Circuit Mappings**: Uses predefined C1-C14 mappings from Firebase for optimal performance
+
+**Simplified Key Features:**
+- ✅ **Direct Flow**: `WebSocket.recv() → base_collector → karting_parser → JSON → clients`
+- ✅ **Dual Format Support**: Handles both initial HTML grid and subsequent pipe messages
+- ✅ **Simple JSON Output**: Produces clean `{"driver_id": {"field": "value"}}` format
+- ✅ **No Complex State Management**: Removed driver_state_manager and callback complexity
+- ✅ **Real-time Processing**: Immediate message processing and client broadcast
+- ✅ **Circuit Mapping Integration**: Uses Firebase circuit configuration for C1-C14 field mapping
+
+**Simplified API Endpoints:**
+- `POST /circuits/{circuit_id}/start-timing` - Start WebSocket timing collection
+- `POST /circuits/{circuit_id}/stop-timing` - Stop WebSocket timing collection
+- `GET /circuits/{circuit_id}/status` - Get timing collector status
+- `WebSocket /circuits/{circuit_id}/live` - Live timing data stream (simplified JSON format)
+
+**Data Flow:**
+```
+WebSocket Message → BaseCollector._process_message() → 
+WebSocketManager.broadcast_karting_data() → 
+KartingMessageParser.parse_message() → 
+Simple JSON Format → Connected Clients
+```
 
 ## Firebase Configuration
 
@@ -174,7 +231,7 @@ Firebase options are auto-generated in `lib/firebase_options.dart`.
 - ✅ Responsive design (hamburger menu on mobile, buttons on desktop)
 - ✅ Racing green theme with consistent button colors
 - ✅ Performance optimization (no pulse animation at 100% threshold)
-- 🚧 Live timing integration (planned)
+- ✅ **Live timing integration with simplified architecture**
 - ❌ Test coverage
 
 ## Git Workflow & Repository Management

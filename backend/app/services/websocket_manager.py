@@ -1,5 +1,5 @@
 """
-WebSocket manager for client connections
+WebSocket manager for client connections with karting data processing
 """
 import asyncio
 import json
@@ -8,6 +8,9 @@ import uuid
 from typing import Dict, Set, Any, Optional
 from fastapi import WebSocket
 import structlog
+
+# Removed driver_state_manager import - using direct karting parser
+# from ..models.karting_data import WebSocketMessage, KartingStatistics
 
 logger = structlog.get_logger(__name__)
 
@@ -40,7 +43,7 @@ class ConnectionManager:
             logger.error(f"[{self._instance_id}] Failed to accept websocket: {e}")
             return
         
-        # Thread-safe connection management (FIXED: async with for asyncio.Lock)
+        # Thread-safe connection management
         async with self._lock:
             # Add to circuit connections
             if circuit_id not in self.circuit_connections:
@@ -56,18 +59,18 @@ class ConnectionManager:
             # Debug: Log current state
             logger.debug(f"[{self._instance_id}] Current circuits with connections: {list(self.circuit_connections.keys())}")
         
-        # Send last known data if available
-        if circuit_id in self.last_data_cache:
-            try:
+        # Send cached data if available
+        try:
+            if circuit_id in self.last_data_cache:
                 await websocket.send_json({
-                    "type": "timing_data",
+                    "type": "cached_data",
                     "data": self.last_data_cache[circuit_id]
                 })
                 logger.debug(f"[{self._instance_id}] Sent cached data to new client for circuit {circuit_id}")
-            except Exception as e:
-                logger.error(f"[{self._instance_id}] Error sending cached data to new client: {e}")
-                # If we can't send cached data, disconnect the client
-                await self.disconnect(websocket)
+        except Exception as e:
+            logger.error(f"[{self._instance_id}] Error sending cached data to new client: {e}")
+    
+    # Removed _ensure_circuit_initialized - no longer needed with direct parser
     
     async def disconnect(self, websocket: WebSocket):
         """Disconnect a client"""
@@ -99,42 +102,102 @@ class ConnectionManager:
             # Debug: Log current state
             logger.debug(f"[{self._instance_id}] Current circuits with connections after disconnect: {list(self.circuit_connections.keys())}")
     
-    async def broadcast_to_circuit(self, circuit_id: str, data: Dict[str, Any]):
-        """Broadcast timing data to all clients of a circuit"""
+    async def broadcast_karting_data(self, circuit_id: str, raw_message: str):
+        """
+        SIMPLIFIED: Process raw message directly through karting parser and broadcast
+        Direct WebSocket → KartingParser → Clients flow
+        """
+        logger.info(f"🎯 WEBSOCKET MANAGER: DIRECT KARTING PROCESSING for circuit {circuit_id}")
+        logger.info(f"🔍 WEBSOCKET MANAGER: Message type: {type(raw_message)}")
+        logger.info(f"🔍 WEBSOCKET MANAGER: Message length: {len(raw_message) if raw_message else 0}")
+        logger.info(f"📝 WEBSOCKET MANAGER: Raw message (first 100 chars): {raw_message[:100]}...")
+        
+        try:
+            # Import karting parser directly
+            from ..analyzers.karting_parser import KartingMessageParser
+            
+            # Create parser instance with circuit mappings if available
+            try:
+                from ..services.firebase_sync import firebase_sync
+                circuit = await firebase_sync.get_circuit_with_mappings(circuit_id)
+                mappings = circuit.get('mappings', {}) if circuit else {}
+            except Exception as e:
+                logger.warning(f"Could not get circuit mappings: {e}")
+                mappings = {}
+            
+            parser = KartingMessageParser(mappings)
+            
+            # Parse the raw message directly
+            result = parser.parse_message(raw_message)
+            
+            if not result.get('success'):
+                logger.warning(f"❌ Parser failed: {result.get('error', 'Unknown error')}")
+                return
+            
+            logger.info(f"✅ WEBSOCKET MANAGER: Parser success: {len(result.get('drivers_updated', []))} drivers updated")
+            
+            # Create simple JSON message in desired format: {"driver_id": {"field": "value"}}
+            simple_drivers = {}
+            mapped_data = result.get('mapped_data', {})
+            
+            for driver_id, driver_data in mapped_data.items():
+                # Clean up driver data to only include field:value pairs
+                simple_driver = {}
+                for key, value in driver_data.items():
+                    if not key.endswith('_raw') and key not in ['driver_id', 'timestamp']:
+                        simple_driver[key] = value
+                simple_drivers[driver_id] = simple_driver
+            
+            # Broadcast simple format
+            message = {
+                "type": "karting_data",
+                "circuit_id": circuit_id,
+                "drivers": simple_drivers,
+                "message_count": result.get('message_count', 0),
+                "timestamp": result.get('timestamp')
+            }
+            
+            await self._broadcast_message_to_circuit(circuit_id, message)
+            
+            logger.info(f"🎯 WEBSOCKET MANAGER: Successfully broadcast simple format for {len(simple_drivers)} drivers")
+            
+        except Exception as e:
+            logger.error(f"❌ Error in direct karting processing: {e}")
+            # Send error to clients
+            await self.send_error(circuit_id, f"Error processing timing data: {str(e)}")
+
+    async def broadcast_to_circuit(self, circuit_id: str, data: Any):
+        """
+        REMOVED: This method is no longer needed - use broadcast_karting_data directly
+        """
+        logger.warning(f"⚠️ broadcast_to_circuit called but is deprecated. Use broadcast_karting_data directly.")
+        logger.info(f"🔧 Converting call to broadcast_karting_data for circuit {circuit_id}")
+        
+        # Convert to string and route to direct processor
+        if isinstance(data, str):
+            message_str = data
+        else:
+            message_str = str(data) if data else ""
+        
+        await self.broadcast_karting_data(circuit_id, message_str)
+
+    async def _broadcast_message_to_circuit(self, circuit_id: str, message_data: Dict[str, Any]):
+        """Internal method to broadcast a message to circuit clients"""
         logger.info(f"[{self._instance_id}] Broadcasting to circuit {circuit_id}")
         
         # Small delay to ensure connection is fully established
         await asyncio.sleep(0.01)
         
-        # DEBUGGING: Log state before broadcast
-        state = self.debug_connection_state(circuit_id)
-        logger.info(f"[{self._instance_id}] 🚨 CONNECTION STATE BEFORE BROADCAST: {state}")
-        
-        # Thread-safe check and copy (FIXED: async with for asyncio.Lock)
+        # Thread-safe check and copy
         async with self._lock:
-            # Debug: Log current connection state
-            logger.debug(f"[{self._instance_id}] Current circuits: {list(self.circuit_connections.keys())}")
-            logger.debug(f"[{self._instance_id}] Looking for circuit: '{circuit_id}' (type: {type(circuit_id)})")
-            
             # Normalize circuit_id to handle potential string issues
             circuit_id = str(circuit_id).strip()
             
             if circuit_id not in self.circuit_connections:
                 logger.warning(f"[{self._instance_id}] No WebSocket connections for circuit '{circuit_id}'")
-                logger.warning(f"[{self._instance_id}] Available circuits: {list(self.circuit_connections.keys())}")
-                
-                # Additional debugging: Check for similar circuit IDs
-                similar_circuits = []
-                for cid in self.circuit_connections.keys():
-                    if str(cid).strip().lower() == circuit_id.lower():
-                        similar_circuits.append(cid)
-                
-                if similar_circuits:
-                    logger.error(f"[{self._instance_id}] Found similar circuits with different case/whitespace: {similar_circuits}")
-                
                 return
             
-            # Check if the set is empty (shouldn't happen due to cleanup logic)
+            # Check if the set is empty
             if not self.circuit_connections[circuit_id]:
                 logger.warning(f"[{self._instance_id}] Circuit {circuit_id} exists but has empty connection set")
                 del self.circuit_connections[circuit_id]  # Clean up
@@ -146,15 +209,15 @@ class ConnectionManager:
             # Create a copy of connections to avoid modification during iteration
             connections = list(self.circuit_connections[circuit_id])
         
-        # Cache the data for new connections (outside the lock to avoid holding it too long)
-        self.last_data_cache[circuit_id] = data
+        # Cache the data for new connections
+        self.last_data_cache[circuit_id] = message_data
         
-        # Prepare message
+        # Prepare message with metadata
         message = {
-            "type": "timing_data",
+            "type": message_data.get("type", "timing_data"),
             "circuit_id": circuit_id,
-            "data": data,
-            "timestamp": data.get('timestamp')
+            "data": message_data,
+            "timestamp": message_data.get('timestamp')
         }
         
         disconnected = []
@@ -167,7 +230,7 @@ class ConnectionManager:
                 logger.debug(f"Successfully sent message to client {sent_count}/{num_connections}")
             except Exception as e:
                 logger.warning(f"Failed to send to client: {e}")
-                # FIXED: Be less aggressive about disconnecting - only disconnect on connection closed errors
+                # Be less aggressive about disconnecting - only disconnect on connection closed errors
                 error_str = str(e).lower()
                 if any(keyword in error_str for keyword in ['connection closed', 'broken pipe', 'connection reset']):
                     logger.info(f"Connection actually closed, will disconnect: {e}")

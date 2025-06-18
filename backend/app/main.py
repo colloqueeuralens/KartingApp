@@ -15,7 +15,6 @@ from .services.firebase_sync import firebase_sync
 from .services.websocket_manager import connection_manager
 from .services.database_service import db_service
 from .collectors.base_collector import collector_manager
-from .analyzers.format_analyzer import FormatAnalyzer
 
 logger = structlog.get_logger(__name__)
 
@@ -162,63 +161,23 @@ async def start_timing(circuit_id: str) -> Dict[str, Any]:
                 "status": "already_running"
             }
         
-        # Start collector with circuit configuration
+        # Start collector with circuit configuration - no callbacks needed, raw messages go directly to karting parser
         collector = await collector_manager.start_collector(circuit_id, wss_url, circuit_config=circuit)
         
-        # Set up callbacks
-        async def handle_data(data):
-            """Handle incoming timing data"""
-            logger.info(f"Received timing data for circuit {circuit_id}")
-            logger.debug(f"Data preview: {str(data)[:200]}...")
-            
-            # Store in database
-            try:
-                await db_service.store_timing_data(data)
-                logger.debug(f"Stored timing data in database for circuit {circuit_id}")
-            except Exception as e:
-                logger.error(f"Failed to store timing data: {e}")
-            
-            # Debug connection manager state before broadcasting
-            debug_state = connection_manager.debug_connection_state(circuit_id)
-            logger.debug(f"Connection manager state before broadcast: {debug_state}")
-            
-            # Broadcast to connected clients
-            logger.info(f"Broadcasting timing data to WebSocket clients for circuit {circuit_id}")
-            await connection_manager.broadcast_to_circuit(circuit_id, data)
-            
-            # Check state after broadcasting
-            post_broadcast_state = connection_manager.debug_connection_state(circuit_id)
-            logger.debug(f"Connection manager state after broadcast: {post_broadcast_state}")
-        
+        # Simple error handler
         async def handle_error(error):
             """Handle collector errors"""
-            # Log to database
-            try:
-                await db_service.log_connection_event(circuit_id, "error", error)
-            except Exception as e:
-                logger.error(f"Failed to log error: {e}")
-            
-            # Send to clients
             await connection_manager.send_error(circuit_id, error)
         
+        # Simple connection status handler  
         async def handle_connection_change(connected):
             """Handle connection state changes"""
-            # Log to database
-            try:
-                event_type = "connect" if connected else "disconnect"
-                await db_service.log_connection_event(circuit_id, event_type, 
-                                                    f"Timing source {event_type}ed")
-            except Exception as e:
-                logger.error(f"Failed to log connection change: {e}")
-            
-            # Send status update to clients
             await connection_manager.send_status_update(circuit_id, {
                 "timing_connected": connected,
                 "timestamp": settings.get_current_timestamp()
             })
         
         collector.set_callbacks(
-            on_data=handle_data,
             on_error=handle_error,
             on_connection_change=handle_connection_change
         )
@@ -270,6 +229,97 @@ async def stop_timing(circuit_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error stopping timing for circuit {circuit_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to stop timing")
+
+
+# Karting-specific endpoints
+@app.get("/circuits/{circuit_id}/drivers")
+async def get_driver_states(circuit_id: str) -> Dict[str, Any]:
+    """Get current driver states with hybrid data (WebSocket + static)"""
+    try:
+        if not await firebase_sync.validate_circuit_exists(circuit_id):
+            raise HTTPException(status_code=404, detail="Circuit not found")
+        
+        # Get driver states from state manager
+        try:
+            from .services.driver_state_manager import driver_state_manager
+            
+            # Ensure circuit is initialized
+            if driver_state_manager.current_circuit_id != circuit_id:
+                success = await driver_state_manager.initialize_circuit(circuit_id)
+                if not success:
+                    raise HTTPException(status_code=500, detail="Failed to initialize circuit")
+            
+            # Get all driver states
+            driver_states = driver_state_manager.get_all_driver_states()
+            statistics = driver_state_manager.get_statistics()
+            
+            return {
+                "circuit_id": circuit_id,
+                "drivers": driver_states,
+                "active_drivers": driver_state_manager.get_active_drivers(),
+                "statistics": statistics,
+                "timestamp": settings.get_current_timestamp()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting driver states: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get driver states")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing driver states request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process request")
+
+
+@app.post("/circuits/{circuit_id}/drivers/clear")
+async def clear_driver_session(circuit_id: str) -> Dict[str, Any]:
+    """Clear all driver session data"""
+    try:
+        if not await firebase_sync.validate_circuit_exists(circuit_id):
+            raise HTTPException(status_code=404, detail="Circuit not found")
+        
+        from .services.driver_state_manager import driver_state_manager
+        
+        await driver_state_manager.clear_session_data()
+        
+        return {
+            "message": "Driver session data cleared",
+            "circuit_id": circuit_id,
+            "timestamp": settings.get_current_timestamp()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error clearing driver session: {e}")
+        raise HTTPException(status_code=500, detail="Failed to clear session")
+
+
+@app.get("/circuits/{circuit_id}/session/export")
+async def export_driver_session(circuit_id: str) -> Dict[str, Any]:
+    """Export complete driver session data"""
+    try:
+        if not await firebase_sync.validate_circuit_exists(circuit_id):
+            raise HTTPException(status_code=404, detail="Circuit not found")
+        
+        from .services.driver_state_manager import driver_state_manager
+        
+        session_data = await driver_state_manager.export_session()
+        
+        return {
+            "circuit_id": circuit_id,
+            "session_data": session_data,
+            "export_timestamp": settings.get_current_timestamp()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting session: {e}")
+        raise HTTPException(status_code=500, detail="Failed to export session")
+
+
 
 
 # Data retrieval endpoints
@@ -324,86 +374,7 @@ async def get_connection_logs(circuit_id: str, limit: int = 50) -> List[Dict[str
         raise HTTPException(status_code=500, detail="Failed to fetch logs")
 
 
-# Analysis endpoints
-@app.post("/circuits/{circuit_id}/analyze-format")
-async def analyze_format(circuit_id: str, sample_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Analyze WebSocket data format and generate parser"""
-    try:
-        # Validate circuit exists
-        if not await firebase_sync.validate_circuit_exists(circuit_id):
-            raise HTTPException(status_code=404, detail="Circuit not found")
-        
-        # Get circuit mappings
-        mappings = await firebase_sync.get_circuit_mappings(circuit_id)
-        
-        # Analyze format
-        analyzer = FormatAnalyzer()
-        
-        # Extract messages from sample data
-        messages = sample_data.get('messages', [])
-        if not messages:
-            raise HTTPException(status_code=400, detail="No messages provided in sample_data")
-        
-        # Analyze patterns
-        patterns = analyzer.analyze_patterns(messages)
-        
-        # Generate parser
-        parser_code = analyzer.generate_parser(patterns, mappings)
-        
-        # Store analysis results in database
-        analysis_data = {
-            "circuit_id": circuit_id,
-            "websocket_url": circuit.get('wssUrl', ''),
-            "detected_format": patterns.get('format', 'unknown'),
-            "message_structure": patterns.get('structure', {}),
-            "patterns": patterns,
-            "update_frequency": patterns.get('frequency', 0.0),
-            "parser_code": parser_code,
-            "parser_version": "1.0",
-            "samples_analyzed": len(messages),
-            "analysis_duration": 0,  # Would need timing in real implementation
-            "is_active": True
-        }
-        
-        try:
-            await db_service.store_circuit_analysis(analysis_data)
-        except Exception as e:
-            logger.error(f"Failed to store analysis results: {e}")
-        
-        return {
-            "circuit_id": circuit_id,
-            "detected_patterns": patterns,
-            "parser_code": parser_code,
-            "mappings_used": mappings,
-            "analysis_stored": True,
-            "timestamp": settings.get_current_timestamp()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error analyzing format for circuit {circuit_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to analyze format")
-
-
-@app.get("/circuits/{circuit_id}/analysis")
-async def get_analysis_results(circuit_id: str) -> Dict[str, Any]:
-    """Get stored analysis results for a circuit"""
-    try:
-        if not await firebase_sync.validate_circuit_exists(circuit_id):
-            raise HTTPException(status_code=404, detail="Circuit not found")
-        
-        analysis = await db_service.get_circuit_analysis(circuit_id)
-        if not analysis:
-            raise HTTPException(status_code=404, detail="No analysis found for this circuit")
-        
-        return analysis
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching analysis for circuit {circuit_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch analysis")
+# Legacy analysis endpoints removed - now using direct karting parser
 
 
 # WebSocket endpoint for live timing
@@ -506,18 +477,15 @@ async def test_broadcast(circuit_id: str) -> Dict[str, Any]:
     debug_state_before = connection_manager.debug_connection_state(circuit_id)
     logger.info(f"🔍 Connection state BEFORE test broadcast: {debug_state_before}")
     
-    # Try to broadcast a test message
-    test_data = {
-        "circuit_id": circuit_id,
-        "timestamp": settings.get_current_timestamp(),
-        "mapped_data": {
-            "teams_data": {"test": {"message": "Hello from test broadcast!"}},
-            "column_mapping": {}
-        }
-    }
+    # Try to broadcast a test karting message (same format as real data)
+    test_karting_message = "r900037777c10|in|0:18"
+    
+    logger.info(f"🧪 Testing with karting message: {test_karting_message}")
     
     try:
-        await connection_manager.broadcast_to_circuit(circuit_id, test_data)
+        # Test karting data processing directly
+        logger.info(f"🧪 Testing karting data processing for circuit {circuit_id}")
+        await connection_manager.broadcast_karting_data(circuit_id, test_karting_message)
         
         # Check connection state after broadcast
         debug_state_after = connection_manager.debug_connection_state(circuit_id)
@@ -537,6 +505,48 @@ async def test_broadcast(circuit_id: str) -> Dict[str, Any]:
             "error": str(e),
             "circuit_id": circuit_id,
             "connections": debug_state_before,
+            "timestamp": settings.get_current_timestamp()
+        }
+
+
+# Test endpoint for composite message format
+@app.post("/circuits/{circuit_id}/test-composite-message")
+async def test_composite_message(circuit_id: str) -> Dict[str, Any]:
+    """Test endpoint to test the new composite message format parsing"""
+    logger.info(f"🧪 TESTING COMPOSITE MESSAGE for circuit {circuit_id}")
+    
+    # Simulate the composite message format you provided
+    test_composite_message = """init|r|
+best|hide|
+css|no26|border-bottom-color:#00FF00 !important; color:#000000 !important;
+css|no2|border-bottom-color:#16DEE9 !important; color:#000000 !important;
+effects||Effecten weergeven
+comments||Opmerkingen
+title1||2 uurs race 
+track||Kartcentrum Lelystad (735m)
+grid||<tbody><tr data-id="r0" class="head" data-pos="0"><td data-id="c1" data-type="grp" data-pr="6"></td><td data-id="c2" data-type="sta" data-pr="1"></td><td data-id="c3" data-type="rk" data-pr="1">Pos.</td><td data-id="c4" data-type="no" data-pr="1">Kart</td><td data-id="c5" data-type="dr" data-pr="1">Team</td></tr><tr data-id="r900038041" data-pos="1"><td data-id="r900038041c1" class="gs"></td><td data-id="r900038041c2" class="sr"></td><td class="rk"><div><p data-id="r900038041c3" class="">1</p></div></td><td class="no"><div data-id="r900038041c4" class="no26">27</div></td><td data-id="r900038041c5" class="dr">ACE OF RACE</td></tr><tr data-id="r900038263" data-pos="8"><td data-id="r900038263c1" class="gs"></td><td data-id="r900038263c2" class="so"></td><td class="rk"><div><p data-id="r900038263c3" class="">8</p></div></td><td class="no"><div data-id="r900038263c4" class="no26">12</div></td><td data-id="r900038263c5" class="dr">FAST&CURIOUS</td></tr></tbody>
+msg||test message"""
+    
+    logger.info(f"🧪 Testing with composite message containing grid data")
+    
+    try:
+        # Test composite message processing directly
+        logger.info(f"🧪 Testing composite message processing for circuit {circuit_id}")
+        await connection_manager.broadcast_karting_data(circuit_id, test_composite_message)
+        
+        return {
+            "message": "Composite message test completed",
+            "circuit_id": circuit_id,
+            "test_message_lines": len(test_composite_message.split('\n')),
+            "has_grid_line": 'grid||' in test_composite_message,
+            "timestamp": settings.get_current_timestamp()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in composite message test: {e}")
+        return {
+            "error": str(e),
+            "circuit_id": circuit_id,
             "timestamp": settings.get_current_timestamp()
         }
 

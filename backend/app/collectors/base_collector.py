@@ -132,207 +132,29 @@ class BaseCollector(ABC):
             logger.debug(f"Heartbeat error: {e}")
     
     async def _process_message(self, message: str):
-        """Process a received message"""
+        """Process a received message - send directly to karting parser"""
         try:
             self.message_count += 1
             self.last_message_time = time.time()
             
-            logger.info(f"Processing message #{self.message_count} for circuit {self.circuit_id}")
-            logger.debug(f"Message preview: {message[:200]}...")
+            logger.info(f"🚀 BASE COLLECTOR: RAW MESSAGE #{self.message_count} for circuit {self.circuit_id}")
+            logger.info(f"🔍 BASE COLLECTOR: Message type: {type(message)}")
+            logger.info(f"🔍 BASE COLLECTOR: Message length: {len(message) if message else 0}")
+            logger.info(f"🔍 BASE COLLECTOR: First 200 chars: {message[:200]}...")
             
-            # Parse message using the generated parser
-            if self.parser:
-                logger.info("Using generated parser")
-                parsed_data = self.parser.parse_message(message)
-            else:
-                logger.info("No parser available, using fallback parsing")
-                # Fallback: try JSON parsing
-                try:
-                    parsed_data = {
-                        'mapped_data': {},
-                        'raw_data': json.loads(message),
-                        'timestamp': None
-                    }
-                    logger.debug("Successfully parsed as JSON")
-                except:
-                    # For Apex Timing, it's usually HTML/text data
-                    parsed_data = {
-                        'mapped_data': self._parse_apex_timing_by_teams(message),
-                        'raw_data': {'raw_message': message},
-                        'timestamp': None
-                    }
-                    logger.debug("Parsed as teams data")
-            
-            # Add metadata
-            timing_data = {
-                'circuit_id': self.circuit_id,
-                'timestamp': datetime.utcnow().isoformat(),
-                'mapped_data': parsed_data.get('mapped_data', {}),
-                'raw_data': parsed_data.get('raw_data', {}),
-                'data_type': 'live_timing',
-                'source_url': self.websocket_url,
-                'message_count': self.message_count
-            }
-            
-            # Always send the first few messages, then check for changes
-            should_send = (self.message_count <= 3 or self._has_data_changed(timing_data))
-            
-            if should_send:
-                self.last_data = timing_data.copy()
-                logger.info(f"Sending timing data for circuit {self.circuit_id}")
-                await self._handle_data(timing_data)
-            else:
-                logger.debug(f"Skipping duplicate data for circuit {self.circuit_id}")
+            # Send raw message DIRECTLY to karting parser via websocket manager
+            logger.info(f"➡️ BASE COLLECTOR: Calling broadcast_karting_data for circuit {self.circuit_id}")
+            from ..services.websocket_manager import connection_manager
+            await connection_manager.broadcast_karting_data(self.circuit_id, message)
+            logger.info(f"✅ BASE COLLECTOR: broadcast_karting_data completed for circuit {self.circuit_id}")
             
         except Exception as e:
-            logger.error(f"Error processing message: {e}")
+            logger.error(f"❌ BASE COLLECTOR: Error processing message: {e}")
             await self._handle_error(f"Message processing error: {e}")
     
-    def _parse_apex_timing_message(self, message: str) -> Dict[str, Any]:
-        """Parse Apex Timing HTML/text message and extract timing data"""
-        mapped_data = {}
-        
-        try:
-            # Apex Timing sends HTML table data
-            # Look for table rows with timing information
-            if '<tr>' in message and '<td' in message:
-                # Extract position and timing data from HTML
-                import re
-                
-                # Find table rows
-                rows = re.findall(r'<tr[^>]*>(.*?)</tr>', message, re.DOTALL)
-                
-                for i, row in enumerate(rows[:14]):  # Limit to 14 positions (C1-C14)
-                    # Extract data from table cells
-                    cells = re.findall(r'<td[^>]*>(.*?)</td>', row)
-                    
-                    if cells and len(cells) >= 2:
-                        # Try to extract meaningful data
-                        position = i + 1
-                        column_key = f"C{position}"
-                        
-                        # Extract driver name, number, time, etc.
-                        driver_info = {}
-                        if len(cells) > 0:
-                            driver_info['position'] = position
-                        if len(cells) > 1:
-                            # Clean HTML tags from driver name
-                            driver_name = re.sub(r'<[^>]+>', '', cells[1]).strip()
-                            if driver_name:
-                                driver_info['driver'] = driver_name
-                        if len(cells) > 2:
-                            # Try to extract timing information
-                            time_str = re.sub(r'<[^>]+>', '', cells[2]).strip()
-                            if time_str and ':' in time_str:
-                                driver_info['time'] = time_str
-                        
-                        if driver_info:
-                            mapped_data[column_key] = driver_info
-            
-            # If we couldn't parse HTML, look for key-value pairs
-            elif '|' in message:
-                parts = message.split('|')
-                for part in parts[:14]:  # Limit to 14 entries
-                    if part.strip():
-                        position = len(mapped_data) + 1
-                        mapped_data[f"C{position}"] = {
-                            'position': position,
-                            'data': part.strip()
-                        }
-            
-            logger.debug(f"Parsed {len(mapped_data)} positions from Apex Timing data")
-            
-        except Exception as e:
-            logger.error(f"Error parsing Apex Timing message: {e}")
-        
-        return mapped_data
+    # Removed all parsing methods - using karting parser directly
     
-    def _parse_apex_timing_by_teams(self, message: str) -> Dict[str, Any]:
-        """Parse Apex Timing message and group data by team ID using circuit column mapping"""
-        teams_data = {}
-        
-        try:
-            logger.debug(f"Parsing Apex Timing message by teams: {message[:100]}...")
-            
-            # Parse the raw message which is typically pipe-separated
-            # Example: "r141429c8|tn|26.07\nr141429c9||..."
-            
-            lines = message.strip().split('\n')
-            
-            for line in lines:
-                if not line.strip():
-                    continue
-                    
-                # Parse pipe-separated data
-                parts = line.split('|')
-                if len(parts) >= 1:
-                    first_part = parts[0].strip()
-                    
-                    # Extract team ID and column from patterns like "r141429c8"
-                    import re
-                    match = re.match(r'r(\d+)c(\d+)', first_part)
-                    if match:
-                        team_id = match.group(1)
-                        column_num = int(match.group(2))
-                        column_key = f"c{column_num}"
-                        
-                        # Get the column name from circuit configuration
-                        column_name = self.circuit_config.get(column_key, f"C{column_num}")
-                        
-                        # Initialize team data if not exists
-                        if team_id not in teams_data:
-                            teams_data[team_id] = {}
-                        
-                        # Get the value - try different positions in the pipe-separated data
-                        value = None
-                        for i in range(1, len(parts)):
-                            potential_value = parts[i].strip()
-                            if potential_value and potential_value != "":
-                                value = potential_value
-                                break
-                        
-                        # Store the value if found
-                        if value:
-                            teams_data[team_id][column_name] = value
-                            logger.debug(f"Mapped team {team_id}, column {column_key} ({column_name}) = {value}")
-            
-            logger.info(f"Parsed {len(teams_data)} teams from Apex Timing data")
-            
-            # Return in the format expected by the frontend
-            return {
-                "teams_data": teams_data,
-                "column_mapping": self.circuit_config
-            }
-            
-        except Exception as e:
-            logger.error(f"Error parsing Apex Timing by teams: {e}")
-            # Fallback to old parsing method
-            return self._parse_apex_timing_message(message)
-    
-    def _has_data_changed(self, new_data: Dict[str, Any]) -> bool:
-        """Check if data has significantly changed since last message"""
-        if not self.last_data:
-            return True
-        
-        # Compare mapped data (ignore timestamp and message_count)
-        last_mapped = self.last_data.get('mapped_data', {})
-        new_mapped = new_data.get('mapped_data', {})
-        
-        return last_mapped != new_mapped
-    
-    async def _handle_data(self, data: Dict[str, Any]):
-        """Handle new timing data"""
-        logger.info(f"Handling data for circuit {self.circuit_id}: {len(data.get('mapped_data', {}))} mapped positions")
-        
-        if self.on_data_callback:
-            try:
-                logger.debug(f"Calling data callback for circuit {self.circuit_id}")
-                await self.on_data_callback(data)
-                logger.debug(f"Data callback completed for circuit {self.circuit_id}")
-            except Exception as e:
-                logger.error(f"Error in data callback: {e}")
-        else:
-            logger.warning(f"No data callback set for circuit {self.circuit_id}")
+    # Removed _handle_data - no callbacks needed anymore
     
     async def _handle_error(self, error_message: str):
         """Handle errors"""
