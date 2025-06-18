@@ -59,17 +59,14 @@ class CircuitService {
     }
   }
 
-  /// Vérifie si un circuit existe déjà avec le même nom ou URL
+  /// Vérifie si un circuit existe déjà avec le même nom ET URL
   static Future<bool> circuitExists(String nom, String liveTimingUrl) async {
-    final queryByName = await _collection
+    final query = await _collection
         .where('nom', isEqualTo: nom)
-        .get();
-    
-    final queryByUrl = await _collection
         .where('liveTimingUrl', isEqualTo: liveTimingUrl)
         .get();
     
-    return queryByName.docs.isNotEmpty || queryByUrl.docs.isNotEmpty;
+    return query.docs.isNotEmpty;
   }
 
   /// Importe des circuits depuis un fichier JSON

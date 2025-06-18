@@ -73,4 +73,41 @@ class SessionService {
         .doc(docId)
         .update({'number': number, 'perf': perf});
   }
+
+  static Future<void> deleteKart(int columnIndex, String docId) {
+    return _sessionRef
+        .collection('columns')
+        .doc('col${columnIndex + 1}')
+        .collection('entries')
+        .doc(docId)
+        .delete();
+  }
+
+  static Future<void> moveKart(int fromColumnIndex, int toColumnIndex, String docId, int number, String perf) async {
+    // Transaction pour assurer la cohérence des données
+    await FirebaseService.db.runTransaction((transaction) async {
+      // Références des documents
+      final fromDocRef = _sessionRef
+          .collection('columns')
+          .doc('col${fromColumnIndex + 1}')
+          .collection('entries')
+          .doc(docId);
+      
+      final toColRef = _sessionRef
+          .collection('columns')
+          .doc('col${toColumnIndex + 1}')
+          .collection('entries');
+
+      // D'abord supprimer de la colonne source pour éviter les doublons temporaires
+      transaction.delete(fromDocRef);
+
+      // Ensuite ajouter à la colonne cible avec un petit délai
+      final newDocRef = toColRef.doc();
+      transaction.set(newDocRef, {
+        'number': number,
+        'perf': perf,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    });
+  }
 }
