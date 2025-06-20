@@ -175,6 +175,16 @@ Implementation: `lib/widgets/dashboard/kart_grid_view.dart:138-144`
 - ✅ **No Complex State Management**: Removed driver_state_manager and callback complexity
 - ✅ **Real-time Processing**: Immediate message processing and client broadcast
 - ✅ **Circuit Mapping Integration**: Uses Firebase circuit configuration for C1-C14 field mapping
+- ✅ **Intelligent Caching**: Frontend fusion system accumulates complete kart profiles over time
+- ✅ **Comprehensive Logging**: Backend and frontend detailed state logging for debugging
+
+**Data Caching Architecture:**
+- **Backend Processing**: Processes only current message data, provides detailed logging after each message
+- **Frontend Intelligence**: Implements smart cache fusion in `lib/services/backend_service.dart`:
+  - Preserves existing kart data (Classement, Equipe, temps) across updates
+  - Merges new data with existing using `addAll()` for intelligent accumulation
+  - Simulates real timing board behavior where data builds up over time
+  - Displays complete kart state in Chrome console for debugging
 
 **Simplified API Endpoints:**
 - `POST /circuits/{circuit_id}/start-timing` - Start WebSocket timing collection
@@ -187,8 +197,15 @@ Implementation: `lib/widgets/dashboard/kart_grid_view.dart:138-144`
 WebSocket Message → BaseCollector._process_message() → 
 WebSocketManager.broadcast_karting_data() → 
 KartingMessageParser.parse_message() → 
-Simple JSON Format → Connected Clients
+Simple JSON Format → Connected Clients → 
+Frontend Intelligent Cache Fusion
 ```
+
+**Debugging & Monitoring:**
+- **Backend Logs**: Complete kart state after each message processing via Docker logs
+- **Frontend Logs**: Intelligent cache state in Chrome Console with complete kart profiles
+- **Message Tracking**: Sequential message numbering and driver update counting
+- **Real-time Visibility**: Compare backend message processing vs frontend accumulation
 
 ## Firebase Configuration
 
