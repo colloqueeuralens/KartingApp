@@ -133,9 +133,20 @@ class BaseCollector(ABC):
     
     async def _process_message(self, message: str):
         """Process a received message - send directly to karting parser"""
+        print(f"🚀 DEBUG COLLECTOR: === DÉBUT _process_message ===")
+        print(f"🚀 DEBUG COLLECTOR: Circuit ID: {self.circuit_id}")
+        print(f"🚀 DEBUG COLLECTOR: Message #{self.message_count + 1}")
+        
         try:
             self.message_count += 1
             self.last_message_time = time.time()
+            
+            print(f"🚀 DEBUG COLLECTOR: Type de message reçu: {type(message)}")
+            print(f"🚀 DEBUG COLLECTOR: Longueur du message: {len(message) if message else 0}")
+            print(f"🚀 DEBUG COLLECTOR: Contient 'grid||' ? {'grid||' in message if message else False}")
+            print(f"🚀 DEBUG COLLECTOR: Contient 'grid' ? {'grid' in message if message else False}")
+            print(f"🚀 DEBUG COLLECTOR: Message complet (premiers 500 chars):")
+            print(f"🚀 DEBUG COLLECTOR: {message[:500] if message else 'None'}...")
             
             logger.info(f"🚀 BASE COLLECTOR: RAW MESSAGE #{self.message_count} for circuit {self.circuit_id}")
             logger.info(f"🔍 BASE COLLECTOR: Message type: {type(message)}")
@@ -143,14 +154,21 @@ class BaseCollector(ABC):
             logger.info(f"🔍 BASE COLLECTOR: First 200 chars: {message[:200]}...")
             
             # Send raw message DIRECTLY to karting parser via websocket manager
+            print(f"➡️ DEBUG COLLECTOR: Appel de connection_manager.broadcast_karting_data...")
             logger.info(f"➡️ BASE COLLECTOR: Calling broadcast_karting_data for circuit {self.circuit_id}")
             from ..services.websocket_manager import connection_manager
             await connection_manager.broadcast_karting_data(self.circuit_id, message)
+            print(f"✅ DEBUG COLLECTOR: broadcast_karting_data terminé")
             logger.info(f"✅ BASE COLLECTOR: broadcast_karting_data completed for circuit {self.circuit_id}")
             
         except Exception as e:
+            print(f"❌ DEBUG COLLECTOR: ERREUR: {e}")
+            import traceback
+            print(f"❌ DEBUG COLLECTOR: Stack trace: {traceback.format_exc()}")
             logger.error(f"❌ BASE COLLECTOR: Error processing message: {e}")
             await self._handle_error(f"Message processing error: {e}")
+        
+        print(f"🚀 DEBUG COLLECTOR: === FIN _process_message ===\n")
     
     # Removed all parsing methods - using karting parser directly
     

@@ -107,7 +107,15 @@ class ConnectionManager:
         SIMPLIFIED: Process raw message directly through karting parser and broadcast
         Direct WebSocket → KartingParser → Clients flow
         """
+        print(f"🎯 DEBUG WEBSOCKET: === DÉBUT BROADCAST_KARTING_DATA ===")
+        print(f"🎯 DEBUG WEBSOCKET: Circuit ID: {circuit_id}")
+        print(f"🎯 DEBUG WEBSOCKET: Type de message: {type(raw_message)}")
+        print(f"🎯 DEBUG WEBSOCKET: Longueur message: {len(raw_message) if raw_message else 0}")
+        print(f"🎯 DEBUG WEBSOCKET: Contient 'grid||': {'grid||' in raw_message if raw_message else False}")
+        print(f"🎯 DEBUG WEBSOCKET: Message (premiers 200 chars): {raw_message[:200] if raw_message else 'None'}...")
+        
         logger.info(f"🎯 WEBSOCKET MANAGER: DIRECT KARTING PROCESSING for circuit {circuit_id}")
+        logger.info(f"🚨 DEBUG VERSION 2.0 - PROCESSING MESSAGE")
         logger.info(f"🔍 WEBSOCKET MANAGER: Message type: {type(raw_message)}")
         logger.info(f"🔍 WEBSOCKET MANAGER: Message length: {len(raw_message) if raw_message else 0}")
         logger.info(f"📝 WEBSOCKET MANAGER: Raw message (first 100 chars): {raw_message[:100]}...")
@@ -131,14 +139,57 @@ class ConnectionManager:
             result = parser.parse_message(raw_message)
             
             if not result.get('success'):
+                print(f"❌ DEBUG WEBSOCKET: Parser failed: {result.get('error', 'Unknown error')}")
                 logger.warning(f"❌ Parser failed: {result.get('error', 'Unknown error')}")
+                
+                # Si l'auto-détection a échoué, sauvegarder des mappings null dans Firebase
+                if 'grid||' in raw_message:  # C'est un message initial d'auto-détection
+                    print(f"🔥 DEBUG WEBSOCKET: Message grid|| détecté, échec auto-détection pour circuit {circuit_id}")
+                    try:
+                        from ..services.firebase_sync import firebase_sync
+                        from ..analyzers.karting_parser import KartingMessageParser
+                        
+                        print(f"🔥 DEBUG WEBSOCKET: Création parser temporaire pour sauvegarde Firebase...")
+                        # Créer temporairement un parser pour accéder à la méthode
+                        temp_parser = KartingMessageParser()
+                        temp_parser._save_null_mappings_to_firebase(circuit_id)
+                        
+                        print(f"⚙️ DEBUG WEBSOCKET: Circuit {circuit_id} marqué comme nécessitant une configuration manuelle")
+                        logger.warning(f"⚙️ Circuit {circuit_id} marqué comme nécessitant une configuration manuelle")
+                        
+                    except Exception as save_error:
+                        print(f"❌ DEBUG WEBSOCKET: Erreur sauvegarde mappings null: {save_error}")
+                        logger.error(f"❌ Erreur sauvegarde mappings null: {save_error}")
+                else:
+                    print(f"🔍 DEBUG WEBSOCKET: Message non-grid, pas de sauvegarde Firebase")
+                
                 return
             
+            print(f"✅ DEBUG WEBSOCKET: Parser success: {len(result.get('drivers_updated', []))} drivers updated")
             logger.info(f"✅ WEBSOCKET MANAGER: Parser success: {len(result.get('drivers_updated', []))} drivers updated")
+            
+            # Si c'est un message grid|| ou init, vérifier si l'auto-détection a fonctionné
+            if 'grid||' in raw_message or 'init' in raw_message:
+                print(f"🎯 DEBUG WEBSOCKET: Message initial avec succès pour circuit {circuit_id}")
+                print(f"🎯 DEBUG WEBSOCKET: Mappings du parser après parsing: {parser.circuit_mappings}")
+                
+                # NOUVEAU: Sauvegarder les mappings auto-détectés dans Firebase
+                if parser.circuit_mappings and len(parser.circuit_mappings) >= 3:
+                    print(f"🎉 DEBUG WEBSOCKET: Auto-détection réussie! Sauvegarde des mappings dans Firebase...")
+                    try:
+                        await parser._save_detected_mappings_to_firebase(circuit_id)
+                        print(f"✅ DEBUG WEBSOCKET: Sauvegarde mappings auto-détectés terminée")
+                    except Exception as save_error:
+                        print(f"❌ DEBUG WEBSOCKET: Erreur sauvegarde mappings auto-détectés: {save_error}")
+                        logger.error(f"❌ Erreur sauvegarde mappings auto-détectés: {save_error}")
+                else:
+                    print(f"⚠️ DEBUG WEBSOCKET: Pas assez de mappings détectés pour sauvegarder: {len(parser.circuit_mappings) if parser.circuit_mappings else 0}")
             
             # Create simple JSON message in desired format: {"driver_id": {"field": "value"}}
             simple_drivers = {}
             mapped_data = result.get('mapped_data', {})
+            
+            logger.info(f"🔍 DEBUG: mapped_data = {mapped_data}")
             
             for driver_id, driver_data in mapped_data.items():
                 # Clean up driver data to only include field:value pairs
@@ -147,6 +198,7 @@ class ConnectionManager:
                     if not key.endswith('_raw') and key not in ['driver_id', 'timestamp']:
                         simple_driver[key] = value
                 simple_drivers[driver_id] = simple_driver
+                logger.info(f"🔍 DEBUG: driver {driver_id} -> {simple_driver}")
             
             # Broadcast simple format
             message = {
@@ -157,9 +209,34 @@ class ConnectionManager:
                 "timestamp": result.get('timestamp')
             }
             
+            logger.info(f"📊 COMPLETE MESSAGE TO SEND: {message}")
+            
             await self._broadcast_message_to_circuit(circuit_id, message)
             
-            logger.info(f"🎯 WEBSOCKET MANAGER: Successfully broadcast simple format for {len(simple_drivers)} drivers")
+            # NOUVEAU: Log détaillé de l'état complet de tous les karts après traitement
+            print(f"")
+            print(f"🏁 ====== BACKEND - ÉTAT COMPLET APRÈS TRAITEMENT MESSAGE ======")
+            print(f"📊 Circuit: {circuit_id}")
+            print(f"📊 Total karts traités dans ce message: {len(simple_drivers)}")
+            print(f"")
+            
+            # Trier les karts par ID pour un affichage ordonné
+            sorted_drivers = sorted(simple_drivers.items(), key=lambda x: x[0])
+            
+            for driver_id, driver_data in sorted_drivers:
+                print(f"🏎️  BACKEND KART #{driver_id}:")
+                # Trier les champs par nom pour un affichage cohérent
+                sorted_fields = sorted(driver_data.items(), key=lambda x: x[0])
+                for field_name, field_value in sorted_fields:
+                    print(f"    • {field_name} → {field_value}")
+                print(f"")
+            
+            print(f"🏁 ====== FIN ÉTAT BACKEND ======")
+            print(f"")
+            
+            # Log the actual drivers data that was sent
+            logger.info(f"📊 DRIVERS DATA SENT: {simple_drivers}")
+            logger.info(f"🎯 WEBSOCKET MANAGER: Successfully broadcast {len(simple_drivers)} drivers")
             
         except Exception as e:
             logger.error(f"❌ Error in direct karting processing: {e}")
