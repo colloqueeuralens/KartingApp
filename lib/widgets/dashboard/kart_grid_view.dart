@@ -790,7 +790,7 @@ class CheckeredPatternPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint();
     const squareSize = 12.0;
-    
+
     // S'assurer que l'opacity est dans la plage valide
     final validOpacity = opacity.clamp(0.0, 1.0);
 

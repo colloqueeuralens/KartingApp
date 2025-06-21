@@ -29,40 +29,28 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
   @override
   void initState() {
     super.initState();
-    
+
     // Animation breathing subtile
     _breathingController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
-    _breathingAnimation = Tween<double>(
-      begin: 0.95,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _breathingController,
-      curve: Curves.easeInOut,
-    ));
+    _breathingAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(parent: _breathingController, curve: Curves.easeInOut),
+    );
 
     // Animation hover
     _hoverController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _hoverController,
-      curve: Curves.easeInOut,
-    ));
-    
-    _opacityAnimation = Tween<double>(
-      begin: 0.6,
-      end: 0.8,
-    ).animate(CurvedAnimation(
-      parent: _hoverController,
-      curve: Curves.easeInOut,
-    ));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeInOut),
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.6, end: 0.8).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeInOut),
+    );
 
     // Démarrer l'animation breathing si activée
     if (widget.showPulse) {
@@ -73,7 +61,7 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
   @override
   void didUpdateWidget(EmptyKartSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     if (widget.showPulse && !_breathingController.isAnimating) {
       _breathingController.repeat(reverse: true);
     } else if (!widget.showPulse && _breathingController.isAnimating) {
@@ -93,7 +81,7 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
     setState(() {
       _isHovered = isHovered;
     });
-    
+
     if (isHovered) {
       _hoverController.forward();
     } else {
@@ -119,19 +107,23 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
               onTap: widget.onTap,
               child: Container(
                 width: 120,
-                height: 80,
+                height: 110,
                 decoration: BoxDecoration(
-                  color: widget.color.withOpacity(_opacityAnimation.value * 0.1),
+                  color: widget.color.withValues(
+                    alpha: _opacityAnimation.value * 0.1,
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: widget.color.withOpacity(_opacityAnimation.value),
+                    color: widget.color.withValues(
+                      alpha: _opacityAnimation.value,
+                    ),
                     width: 2,
                     style: BorderStyle.solid,
                   ),
                   boxShadow: _isHovered
                       ? [
                           BoxShadow(
-                            color: widget.color.withOpacity(0.2),
+                            color: widget.color.withValues(alpha: 0.2),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -148,11 +140,13 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
                       child: CustomPaint(
                         size: Size.infinite,
                         painter: DashedPatternPainter(
-                          color: widget.color.withOpacity(_opacityAnimation.value * 0.3),
+                          color: widget.color.withValues(
+                            alpha: _opacityAnimation.value * 0.3,
+                          ),
                         ),
                       ),
                     ),
-                    
+
                     // Contenu central
                     Center(
                       child: Column(
@@ -162,28 +156,36 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: widget.color.withOpacity(_opacityAnimation.value * 0.1),
+                              color: widget.color.withValues(
+                                alpha: _opacityAnimation.value * 0.1,
+                              ),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: widget.color.withOpacity(_opacityAnimation.value),
+                                color: widget.color.withValues(
+                                  alpha: _opacityAnimation.value,
+                                ),
                                 width: 1,
                               ),
                             ),
                             child: Icon(
                               Icons.add_circle_outline,
-                              color: widget.color.withOpacity(_opacityAnimation.value),
+                              color: widget.color.withValues(
+                                alpha: _opacityAnimation.value,
+                              ),
                               size: 24,
                             ),
                           ),
-                          
+
                           const SizedBox(height: 8),
-                          
+
                           // Texte
                           Text(
                             'Ajouter\nKart',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: widget.color.withOpacity(_opacityAnimation.value),
+                              color: widget.color.withValues(
+                                alpha: _opacityAnimation.value,
+                              ),
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
@@ -191,7 +193,7 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
                         ],
                       ),
                     ),
-                    
+
                     // Animation de highlight sur hover
                     if (_isHovered)
                       Container(
@@ -200,7 +202,7 @@ class _EmptyKartSlotState extends State<EmptyKartSlot>
                           gradient: RadialGradient(
                             center: Alignment.center,
                             colors: [
-                              widget.color.withOpacity(0.1),
+                              widget.color.withValues(alpha: 0.1),
                               Colors.transparent,
                             ],
                           ),
@@ -231,7 +233,7 @@ class DashedPatternPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final path = Path();
-    
+
     // Créer des lignes diagonales en pointillés
     for (double y = 0; y < size.height; y += 16) {
       for (double x = 0; x < size.width; x += 8) {
@@ -241,7 +243,7 @@ class DashedPatternPainter extends CustomPainter {
         }
       }
     }
-    
+
     canvas.drawPath(path, paint);
   }
 
@@ -254,11 +256,7 @@ class CompactEmptyKartSlot extends StatelessWidget {
   final VoidCallback? onTap;
   final Color color;
 
-  const CompactEmptyKartSlot({
-    super.key,
-    this.onTap,
-    required this.color,
-  });
+  const CompactEmptyKartSlot({super.key, this.onTap, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -269,17 +267,13 @@ class CompactEmptyKartSlot extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           border: Border.all(
-            color: color.withOpacity(0.5),
+            color: color.withValues(alpha: 0.5),
             width: 1,
             style: BorderStyle.solid,
           ),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(
-          Icons.add,
-          color: color.withOpacity(0.7),
-          size: 20,
-        ),
+        child: Icon(Icons.add, color: color.withValues(alpha: 0.7), size: 20),
       ),
     );
   }

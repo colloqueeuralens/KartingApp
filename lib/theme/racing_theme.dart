@@ -53,7 +53,7 @@ class RacingTheme {
   // Ombres racing
   static List<BoxShadow> racingShadow = [
     BoxShadow(
-      color: racingRed.withOpacity(0.3),
+      color: racingRed.withValues(alpha: 0.3),
       blurRadius: 8,
       offset: const Offset(0, 4),
     ),
@@ -61,7 +61,7 @@ class RacingTheme {
 
   static List<BoxShadow> darkShadow = [
     BoxShadow(
-      color: racingBlack.withOpacity(0.2),
+      color: racingBlack.withValues(alpha: 0.2),
       blurRadius: 12,
       offset: const Offset(0, 6),
     ),
@@ -137,7 +137,7 @@ class RacingTheme {
       // Card theme
       cardTheme: CardThemeData(
         elevation: 6,
-        shadowColor: racingBlack.withOpacity(0.2),
+        shadowColor: racingBlack.withValues(alpha: 0.2),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusM),
         ),
@@ -250,7 +250,7 @@ class RacingWidgets {
         borderRadius: BorderRadius.circular(RacingTheme.radiusS),
         boxShadow: [
           BoxShadow(
-            color: RacingTheme.getPerformanceColor(perf).withOpacity(0.3),
+            color: RacingTheme.getPerformanceColor(perf).withValues(alpha: 0.3),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -304,7 +304,7 @@ class CheckeredPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = RacingTheme.racingWhite.withOpacity(opacity)
+      ..color = RacingTheme.racingWhite.withValues(alpha: opacity)
       ..style = PaintingStyle.fill;
 
     const squareSize = 20.0;

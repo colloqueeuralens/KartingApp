@@ -34,32 +34,24 @@ class _RacingKartCardState extends State<RacingKartCard>
   @override
   void initState() {
     super.initState();
-    
+
     // Animation pulse pour moment optimal
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    _pulseAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.1,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     // Animation hover
     _hoverController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _hoverController,
-      curve: Curves.easeInOut,
-    ));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeInOut),
+    );
 
     // Démarrer pulse si moment optimal
     if (widget.isOptimalMoment && widget.showPulse) {
@@ -70,11 +62,14 @@ class _RacingKartCardState extends State<RacingKartCard>
   @override
   void didUpdateWidget(RacingKartCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // Gérer l'animation pulse
-    if (widget.isOptimalMoment && widget.showPulse && !_pulseController.isAnimating) {
+    if (widget.isOptimalMoment &&
+        widget.showPulse &&
+        !_pulseController.isAnimating) {
       _pulseController.repeat(reverse: true);
-    } else if ((!widget.isOptimalMoment || !widget.showPulse) && _pulseController.isAnimating) {
+    } else if ((!widget.isOptimalMoment || !widget.showPulse) &&
+        _pulseController.isAnimating) {
       _pulseController.stop();
       _pulseController.reset();
     }
@@ -91,7 +86,7 @@ class _RacingKartCardState extends State<RacingKartCard>
     setState(() {
       _isHovered = isHovered;
     });
-    
+
     if (isHovered) {
       _hoverController.forward();
     } else {
@@ -119,26 +114,26 @@ class _RacingKartCardState extends State<RacingKartCard>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      widget.color.withOpacity(0.9),
-                      widget.color.withOpacity(0.7),
+                      widget.color.withValues(alpha: 0.9),
+                      widget.color.withValues(alpha: 0.7),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: widget.isOptimalMoment 
-                        ? Colors.amber 
-                        : widget.color.withOpacity(0.3),
+                    color: widget.isOptimalMoment
+                        ? Colors.amber
+                        : widget.color.withValues(alpha: 0.3),
                     width: widget.isOptimalMoment ? 3 : 1,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: widget.color.withOpacity(0.3),
+                      color: widget.color.withValues(alpha: 0.3),
                       blurRadius: _isHovered ? 12 : 6,
                       offset: Offset(0, _isHovered ? 6 : 3),
                     ),
                     if (widget.isOptimalMoment)
                       BoxShadow(
-                        color: Colors.amber.withOpacity(0.5),
+                        color: Colors.amber.withValues(alpha: 0.5),
                         blurRadius: 8,
                         offset: const Offset(0, 0),
                       ),
@@ -155,61 +150,65 @@ class _RacingKartCardState extends State<RacingKartCard>
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Colors.amber.withOpacity(0.2),
+                              Colors.amber.withValues(alpha: 0.2),
                               Colors.transparent,
                             ],
                           ),
                         ),
                       ),
-                    
+
                     // Contenu principal
                     Padding(
                       padding: const EdgeInsets.all(8),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           // Numéro de kart avec style racing
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: widget.color,
-                                width: 2,
+                          Align(
+                            alignment: Alignment.center,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
                               ),
-                            ),
-                            child: Text(
-                              '#${widget.kartNumber}',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: widget.color,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: widget.color, width: 2),
+                              ),
+                              child: Text(
+                                '#${widget.kartNumber}',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: widget.color,
+                                ),
                               ),
                             ),
                           ),
-                          
+
                           const SizedBox(height: 8),
-                          
+
                           // Performance indicator
                           if (widget.performance != null)
-                            PerformanceIndicator(
-                              performance: widget.performance!,
+                            Align(
+                              alignment: Alignment.center,
+                              child: PerformanceIndicator(
+                                performance: widget.performance!,
+                              ),
                             ),
                         ],
                       ),
                     ),
-                    
+
                     // Icône racing en arrière-plan
                     Positioned(
                       top: 8,
                       right: 8,
                       child: Icon(
                         Icons.speed,
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         size: 20,
                       ),
                     ),
@@ -228,10 +227,7 @@ class _RacingKartCardState extends State<RacingKartCard>
 class PerformanceIndicator extends StatelessWidget {
   final String performance;
 
-  const PerformanceIndicator({
-    super.key,
-    required this.performance,
-  });
+  const PerformanceIndicator({super.key, required this.performance});
 
   Color _getPerformanceColor() {
     switch (performance) {
@@ -282,11 +278,7 @@ class PerformanceIndicator extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _getPerformanceIcon(),
-            color: Colors.white,
-            size: 14,
-          ),
+          Icon(_getPerformanceIcon(), color: Colors.white, size: 14),
           const SizedBox(width: 2),
           Text(
             performance,

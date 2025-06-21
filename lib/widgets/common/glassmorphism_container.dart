@@ -36,10 +36,9 @@ class GlassmorphismContainer extends StatelessWidget {
       margin: margin,
       decoration: BoxDecoration(
         borderRadius: borderRadius ?? BorderRadius.circular(16),
-        border: border ?? Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
-        ),
+        border:
+            border ??
+            Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
       ),
       child: ClipRRect(
         borderRadius: borderRadius ?? BorderRadius.circular(16),
@@ -47,7 +46,7 @@ class GlassmorphismContainer extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
           child: Container(
             decoration: BoxDecoration(
-              color: (color ?? Colors.white).withOpacity(opacity),
+              color: (color ?? Colors.white).withValues(alpha: opacity),
               borderRadius: borderRadius ?? BorderRadius.circular(16),
             ),
             padding: padding ?? const EdgeInsets.all(16),
@@ -71,7 +70,8 @@ class OptimalMomentNotification extends StatefulWidget {
   });
 
   @override
-  State<OptimalMomentNotification> createState() => _OptimalMomentNotificationState();
+  State<OptimalMomentNotification> createState() =>
+      _OptimalMomentNotificationState();
 }
 
 class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
@@ -84,12 +84,12 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
   @override
   void initState() {
     super.initState();
-    
+
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -98,18 +98,11 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, -1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
-    _pulseAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     if (widget.isVisible) {
       _slideController.forward();
@@ -120,7 +113,7 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
   @override
   void didUpdateWidget(OptimalMomentNotification oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     if (widget.isVisible && !oldWidget.isVisible) {
       _slideController.forward();
       _pulseController.repeat(reverse: true);
@@ -153,7 +146,7 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
                 opacity: 0.25,
                 color: Colors.green,
                 border: Border.all(
-                  color: Colors.green.withOpacity(0.3),
+                  color: Colors.green.withValues(alpha: 0.3),
                   width: 2,
                 ),
                 child: Row(
@@ -162,7 +155,7 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.2),
+                        color: Colors.green.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -171,9 +164,9 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
                         size: 32,
                       ),
                     ),
-                    
+
                     const SizedBox(width: 16),
-                    
+
                     // Contenu
                     Expanded(
                       child: Column(
@@ -192,22 +185,19 @@ class _OptimalMomentNotificationState extends State<OptimalMomentNotification>
                           Text(
                             "Performance optimale atteinte",
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                               fontSize: 14,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    
+
                     // Bouton fermer
                     if (widget.onDismiss != null)
                       IconButton(
                         onPressed: widget.onDismiss,
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                        ),
+                        icon: const Icon(Icons.close, color: Colors.white),
                       ),
                   ],
                 ),
@@ -256,17 +246,14 @@ class GlassmorphismDialog extends StatelessWidget {
               ),
               const SizedBox(height: 16),
             ],
-            
+
             // Contenu
             child,
-            
+
             // Actions
             if (actions != null) ...[
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: actions!,
-              ),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions!),
             ],
           ],
         ),
@@ -291,7 +278,7 @@ class LiveTimingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!isVisible) return const SizedBox.shrink();
-    
+
     return Positioned(
       top: 0,
       left: 0,
@@ -304,13 +291,13 @@ class LiveTimingOverlay extends StatelessWidget {
           opacity: 0.2,
           color: Colors.black,
           border: Border.all(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             width: 1,
           ),
           child: Stack(
             children: [
               child,
-              
+
               // Bouton fermer
               if (onClose != null)
                 Positioned(
@@ -318,10 +305,7 @@ class LiveTimingOverlay extends StatelessWidget {
                   right: 8,
                   child: IconButton(
                     onPressed: onClose,
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white70,
-                    ),
+                    icon: const Icon(Icons.close, color: Colors.white70),
                   ),
                 ),
             ],

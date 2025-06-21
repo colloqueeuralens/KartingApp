@@ -47,23 +47,35 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
   int _lastValidPercentage = 0;
   bool _lastValidIsOptimal = false;
   int _lastKartCount = 0;
-  bool _showOptimalNotification = false;
-
-  late AnimationController _notificationController;
 
   @override
   void initState() {
     super.initState();
-    _notificationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
   }
 
   @override
   void dispose() {
-    _notificationController.dispose();
     super.dispose();
+  }
+
+  /// Retourne une couleur visible pour le texte selon la luminance de la couleur de fond
+  Color _getVisibleColor(Color backgroundColor) {
+    // Calculer la luminance de la couleur de fond
+    final luminance = backgroundColor.computeLuminance();
+
+    // Si la couleur est trop claire (luminance > 0.8), utiliser gris foncé
+    // Sinon, utiliser la couleur originale
+    return luminance > 0.8 ? Colors.grey.shade700 : backgroundColor;
+  }
+
+  /// Retourne une couleur visible pour les slots vides selon la luminance de la couleur de colonne
+  Color _getVisibleColorForSlot(Color columnColor) {
+    // Calculer la luminance de la couleur de colonne
+    final luminance = columnColor.computeLuminance();
+
+    // Si la couleur est trop claire (luminance > 0.8), utiliser gris
+    // Sinon, utiliser la couleur originale de la colonne
+    return luminance > 0.8 ? Colors.grey : columnColor;
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _colStream(int c) =>
@@ -169,9 +181,10 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
   }) {
     final blocked = Set<int>.from(usedNumbers);
     if (initialNumber != null) blocked.remove(initialNumber);
-    final available = List.generate(99, (i) => i + 1)
-        .where((n) => !blocked.contains(n))
-        .toList();
+    final available = List.generate(
+      99,
+      (i) => i + 1,
+    ).where((n) => !blocked.contains(n)).toList();
     int? selNum = initialNumber;
     String? selPerf = initialPerf;
     const opts = ['++', '+', '~', '-', '--', '?'];
@@ -189,11 +202,16 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
               children: [
                 // Dropdown numéro
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: DropdownButton<int>(
                     isExpanded: true,
@@ -201,32 +219,46 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                     value: selNum,
                     underline: const SizedBox.shrink(),
                     items: available
-                        .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                        .map(
+                          (n) => DropdownMenuItem(
+                            value: n,
+                            child: Center(child: Text('$n')),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) => setDialog(() => selNum = v),
                   ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Dropdown performance avec style racing
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: DropdownButton<String>(
                     isExpanded: true,
                     hint: const Text('Performance'),
                     value: selPerf,
                     underline: const SizedBox.shrink(),
-                    items: opts.map((p) => DropdownMenuItem(
-                      value: p,
-                      child: Center(
-                        child: PerformanceIndicator(performance: p),
-                      ),
-                    )).toList(),
+                    items: opts
+                        .map(
+                          (p) => DropdownMenuItem(
+                            value: p,
+                            child: Center(
+                              child: PerformanceIndicator(performance: p),
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (v) => setDialog(() => selPerf = v),
                   ),
                 ),
@@ -235,7 +267,10 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
             actions: [
               GlassmorphismButton(
                 onPressed: () => Navigator.pop(dCtx),
-                child: const Text('Annuler', style: TextStyle(color: Colors.white)),
+                child: const Text(
+                  'Annuler',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
               if (onDelete != null)
                 GlassmorphismButton(
@@ -322,28 +357,6 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
     );
   }
 
-  void _checkOptimalMoment(bool isOptimal, bool wasOptimal) {
-    if (isOptimal && !wasOptimal && !_showOptimalNotification) {
-      // Utiliser addPostFrameCallback pour éviter setState pendant build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _showOptimalNotification = true;
-          });
-          
-          // Auto-hide après 5 secondes
-          Future.delayed(const Duration(seconds: 5), () {
-            if (mounted) {
-              setState(() {
-                _showOptimalNotification = false;
-              });
-            }
-          });
-        }
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<QuerySnapshot<Map<String, dynamic>>>>(
@@ -376,11 +389,9 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
           final docs = colsData[colIndex];
           if (docs.isNotEmpty) {
             final firstKart = docs.first.data();
-            final number = firstKart['number'] as int;
             final p = firstKart['perf'] as String;
-            final appearances = kartNumbers.where((n) => n == number).length;
-
-            if (appearances == 1 && (p == '++' || p == '+')) {
+            
+            if (p == '++' || p == '+') {
               good++;
             }
           }
@@ -391,244 +402,263 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
             ? (good * 100 / widget.numColumns).round()
             : 0;
 
-        // Détection d'état transitoire
-        final hasTemporaryDuplicates = kartNumbers.toSet().length != kartNumbers.length;
-        final isTransitionalState = _isMovingKart ||
-            (currentKartCount == 0 && _lastKartCount > 0) ||
-            (calculatedPct == 0 && _lastValidPercentage > 0) ||
-            hasTemporaryDuplicates ||
-            (currentKartCount > widget.numColumns);
+        final threshold = widget.numColumns == 2
+            ? 100
+            : widget.numColumns == 3
+            ? 66
+            : widget.numColumns == 4
+            ? 75
+            : 100;
 
-        final threshold = widget.numColumns == 2 ? 100 :
-            widget.numColumns == 3 ? 66 :
-            widget.numColumns == 4 ? 75 : 100;
+        // Détection d'état transitoire pour éviter les affichages incorrects pendant drag & drop
+        final hasTemporaryDuplicates = kartNumbers.toSet().length != kartNumbers.length;
+        final isTransitionalState = _isMovingKart || hasTemporaryDuplicates;
 
         final int pct;
         final bool isOpt;
 
         if (isTransitionalState) {
+          // Pendant drag & drop : garder l'affichage stable (dernières valeurs valides)
           pct = _lastValidPercentage;
           isOpt = _lastValidIsOptimal;
         } else {
+          // État stable : utiliser le calcul en temps réel
           pct = calculatedPct;
           isOpt = pct >= threshold;
-
-          // Vérifier si moment optimal atteint
-          _checkOptimalMoment(isOpt, _lastValidIsOptimal);
-
-          if (currentKartCount > 0 || (currentKartCount == 0 && _lastKartCount == 0)) {
-            _lastValidPercentage = pct;
-            _lastValidIsOptimal = isOpt;
-            _lastKartCount = currentKartCount;
-          }
+          
+          // Mettre à jour le cache seulement dans les états stables
+          _lastValidPercentage = pct;
+          _lastValidIsOptimal = isOpt;
+          _lastKartCount = currentKartCount;
         }
 
-        return Stack(
+        return Column(
           children: [
-            Column(
-              children: [
-                // Indicateur de moment optimal (style original)
-                _buildOptimalMomentIndicator(isOpt, pct, threshold),
-                
-                // Grille des karts
-                Expanded(
-                  child: Row(
-                    children: List.generate(widget.numColumns, (col) {
-                      final docs = colsData[col];
-                      final isHovered = _hoveredColumns.contains(col);
+            // Indicateur de moment optimal (style original)
+            _buildOptimalMomentIndicator(isOpt, pct, threshold),
 
-                      return Expanded(
-                        child: DragTarget<KartData>(
-                          onWillAccept: (data) {
-                            if (widget.readOnly) return false;
-                            if (data == null) return false;
-                            if (data.fromColumn == col) return false;
-                            return docs.length < widget.numRows;
-                          },
-                          onAccept: (kartData) {
-                            _moveKart(context, kartData, col);
-                            setState(() {
-                              _hoveredColumns.remove(col);
-                            });
-                          },
-                          onMove: (details) {
-                            if (!_hoveredColumns.contains(col)) {
-                              setState(() {
-                                _hoveredColumns.add(col);
-                              });
-                            }
-                          },
-                          onLeave: (data) {
-                            setState(() {
-                              _hoveredColumns.remove(col);
-                            });
-                          },
-                          builder: (context, candidateData, rejectedData) {
-                            return Container(
-                              margin: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: isHovered
-                                    ? Colors.blue.withOpacity(0.2)
-                                    : widget.columnColors[col].withOpacity(0.05),
-                                border: isHovered
-                                    ? Border.all(color: Colors.blue, width: 2)
-                                    : Border.all(
-                                        color: widget.columnColors[col].withOpacity(0.3),
-                                        width: 1,
+            // Grille des karts
+            Expanded(
+              child: Row(
+                children: List.generate(widget.numColumns, (col) {
+                  final docs = colsData[col];
+                  final isHovered = _hoveredColumns.contains(col);
+
+                  return Expanded(
+                    child: DragTarget<KartData>(
+                      onWillAccept: (data) {
+                        if (widget.readOnly) return false;
+                        if (data == null) return false;
+                        if (data.fromColumn == col) return false;
+                        return docs.length < widget.numRows;
+                      },
+                      onAccept: (kartData) {
+                        _moveKart(context, kartData, col);
+                        setState(() {
+                          _hoveredColumns.remove(col);
+                        });
+                      },
+                      onMove: (details) {
+                        if (!_hoveredColumns.contains(col)) {
+                          setState(() {
+                            _hoveredColumns.add(col);
+                          });
+                        }
+                      },
+                      onLeave: (data) {
+                        setState(() {
+                          _hoveredColumns.remove(col);
+                        });
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        return Container(
+                          margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: isHovered
+                                ? Colors.blue.withValues(alpha: 0.2)
+                                : widget.columnColors[col].withValues(
+                                    alpha: 0.2,
+                                  ),
+                            border: isHovered
+                                ? Border.all(color: Colors.blue, width: 2)
+                                : Border.all(
+                                    color: _getVisibleColor(
+                                      widget.columnColors[col],
+                                    ).withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              // Header colonne
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _getVisibleColorForSlot(
+                                    widget.columnColors[col],
+                                  ).withValues(alpha: 0.1),
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(12),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.flag,
+                                      color: _getVisibleColor(
+                                        widget.columnColors[col],
                                       ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                children: [
-                                  // Header colonne
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: widget.columnColors[col].withOpacity(0.1),
-                                      borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(12),
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Colonne ${col + 1}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: _getVisibleColor(
+                                          widget.columnColors[col],
+                                        ),
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.flag,
-                                          color: widget.columnColors[col],
-                                          size: 16,
+                                  ],
+                                ),
+                              ),
+
+                              // Liste des karts
+                              Expanded(
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.all(8),
+                                  itemCount: widget.numRows,
+                                  itemBuilder: (_, i) {
+                                    if (i < docs.length) {
+                                      // Kart existant
+                                      final doc = docs[i];
+                                      final data = doc.data();
+                                      final number = data['number'] as int;
+                                      final perf = data['perf'] as String;
+                                      final kartData = KartData(
+                                        docId: doc.id,
+                                        number: number,
+                                        perf: perf,
+                                        fromColumn: col,
+                                      );
+
+                                      final isKartOptimal =
+                                          (perf == '++' || perf == '+');
+                                      final showPulse =
+                                          isKartOptimal && isOpt && pct < 100;
+
+                                      final kartCard = Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          vertical: 4,
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Colonne ${col + 1}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: widget.columnColors[col],
+                                        child: RacingKartCard(
+                                          kartNumber: number.toString(),
+                                          performance: perf,
+                                          color:
+                                              RacingTheme.getPerformanceColor(
+                                                perf,
+                                              ),
+                                          isOptimalMoment:
+                                              isKartOptimal && isOpt,
+                                          showPulse: showPulse,
+                                          onTap: widget.readOnly
+                                              ? null
+                                              : () => _showKartDialog(
+                                                  context,
+                                                  col,
+                                                  usedNumbers: usedNumbers,
+                                                  initialNumber: number,
+                                                  initialPerf: perf,
+                                                  docId: doc.id,
+                                                  onConfirm: (n, p) =>
+                                                      _editKart(
+                                                        col,
+                                                        doc.id,
+                                                        n,
+                                                        p,
+                                                      ),
+                                                  onDelete: () => _deleteKart(
+                                                    context,
+                                                    col,
+                                                    doc.id,
+                                                  ),
+                                                ),
+                                        ),
+                                      );
+
+                                      return widget.readOnly
+                                          ? kartCard
+                                          : Draggable<KartData>(
+                                              data: kartData,
+                                              feedback: Material(
+                                                elevation: 8,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                child: RacingKartCard(
+                                                  kartNumber: number.toString(),
+                                                  performance: perf,
+                                                  color:
+                                                      RacingTheme.getPerformanceColor(
+                                                        perf,
+                                                      ),
+                                                  isOptimalMoment: false,
+                                                  showPulse: false,
+                                                ),
+                                              ),
+                                              childWhenDragging: Container(
+                                                margin:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 4,
+                                                    ),
+                                                child: RacingKartCard(
+                                                  kartNumber: number.toString(),
+                                                  performance: perf,
+                                                  color: Colors.grey,
+                                                  isOptimalMoment: false,
+                                                  showPulse: false,
+                                                ),
+                                              ),
+                                              child: kartCard,
+                                            );
+                                    } else {
+                                      // Slot vide
+                                      return Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                        ),
+                                        child: EmptyKartSlot(
+                                          color: _getVisibleColorForSlot(
+                                            widget.columnColors[col],
                                           ),
+                                          showPulse:
+                                              isHovered && !widget.readOnly,
+                                          onTap: widget.readOnly
+                                              ? null
+                                              : () => _showKartDialog(
+                                                  context,
+                                                  col,
+                                                  usedNumbers: usedNumbers,
+                                                  onConfirm: (n, p) =>
+                                                      _addKart(col, n, p),
+                                                ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  
-                                  // Liste des karts
-                                  Expanded(
-                                    child: ListView.builder(
-                                      padding: const EdgeInsets.all(8),
-                                      itemCount: widget.numRows,
-                                      itemBuilder: (_, i) {
-                                        if (i < docs.length) {
-                                          // Kart existant
-                                          final doc = docs[i];
-                                          final data = doc.data();
-                                          final number = data['number'] as int;
-                                          final perf = data['perf'] as String;
-                                          final kartData = KartData(
-                                            docId: doc.id,
-                                            number: number,
-                                            perf: perf,
-                                            fromColumn: col,
-                                          );
-
-                                          final isKartOptimal = (perf == '++' || perf == '+');
-                                          final showPulse = isKartOptimal && isOpt && pct < 100;
-
-                                          final kartCard = Container(
-                                            margin: const EdgeInsets.symmetric(vertical: 4),
-                                            child: RacingKartCard(
-                                              kartNumber: number.toString(),
-                                              performance: perf,
-                                              color: RacingTheme.getPerformanceColor(perf),
-                                              isOptimalMoment: isKartOptimal && isOpt,
-                                              showPulse: showPulse,
-                                              onTap: widget.readOnly
-                                                  ? null
-                                                  : () => _showKartDialog(
-                                                      context,
-                                                      col,
-                                                      usedNumbers: usedNumbers,
-                                                      initialNumber: number,
-                                                      initialPerf: perf,
-                                                      docId: doc.id,
-                                                      onConfirm: (n, p) => _editKart(col, doc.id, n, p),
-                                                      onDelete: () => _deleteKart(context, col, doc.id),
-                                                    ),
-                                            ),
-                                          );
-
-                                          return widget.readOnly
-                                              ? kartCard
-                                              : Draggable<KartData>(
-                                                  data: kartData,
-                                                  feedback: Material(
-                                                    elevation: 8,
-                                                    borderRadius: BorderRadius.circular(16),
-                                                    child: RacingKartCard(
-                                                      kartNumber: number.toString(),
-                                                      performance: perf,
-                                                      color: RacingTheme.getPerformanceColor(perf),
-                                                      isOptimalMoment: false,
-                                                      showPulse: false,
-                                                    ),
-                                                  ),
-                                                  childWhenDragging: Container(
-                                                    margin: const EdgeInsets.symmetric(vertical: 4),
-                                                    child: RacingKartCard(
-                                                      kartNumber: number.toString(),
-                                                      performance: perf,
-                                                      color: Colors.grey,
-                                                      isOptimalMoment: false,
-                                                      showPulse: false,
-                                                    ),
-                                                  ),
-                                                  child: kartCard,
-                                                );
-                                        } else {
-                                          // Slot vide
-                                          return Container(
-                                            margin: const EdgeInsets.symmetric(vertical: 4),
-                                            child: EmptyKartSlot(
-                                              color: widget.columnColors[col],
-                                              showPulse: isHovered && !widget.readOnly,
-                                              onTap: widget.readOnly
-                                                  ? null
-                                                  : () => _showKartDialog(
-                                                      context,
-                                                      col,
-                                                      usedNumbers: usedNumbers,
-                                                      onConfirm: (n, p) => _addKart(col, n, p),
-                                                    ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ],
+                                      );
+                                    }
+                                  },
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ],
-            ),
-            
-            // Notification glassmorphism moment optimal
-            if (_showOptimalNotification)
-              Positioned(
-                top: 20,
-                left: 0,
-                right: 0,
-                child: OptimalMomentNotification(
-                  isVisible: _showOptimalNotification,
-                  onDismiss: () {
-                    setState(() {
-                      _showOptimalNotification = false;
-                    });
-                  },
-                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }),
               ),
+            ),
           ],
         );
       },
@@ -642,7 +672,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
   ) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         gradient: isOptimal
             ? RacingTheme.successGradient
@@ -651,21 +681,21 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         boxShadow: isOptimal
             ? RacingTheme.racingShadow
             : RacingTheme.darkShadow,
       ),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: Colors.white.withOpacity(0.3),
-            width: 2,
+            color: Colors.white.withValues(alpha: 0.3),
+            width: 1,
           ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
           child: Stack(
             children: [
               // Racing pattern background
@@ -678,7 +708,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
 
               // Content
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(6),
                 child: Column(
                   children: [
                     // Racing lights row
@@ -688,22 +718,24 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                         final lightOn =
                             isOptimal || index < (percentage / 20).floor();
                         return Container(
-                          width: 16,
-                          height: 16,
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: lightOn
                                 ? (isOptimal
                                       ? Colors.white
-                                      : Colors.white.withOpacity(0.7))
-                                : Colors.white.withOpacity(0.3),
+                                      : Colors.white.withValues(alpha: 0.7))
+                                : Colors.white.withValues(alpha: 0.3),
                             boxShadow: lightOn
                                 ? [
                                     BoxShadow(
-                                      color: Colors.white.withOpacity(0.5),
-                                      blurRadius: 8,
-                                      spreadRadius: 2,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      blurRadius: 4,
+                                      spreadRadius: 0.5,
                                     ),
                                   ]
                                 : null,
@@ -712,7 +744,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                       }),
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 5),
 
                     // Status message
                     Row(
@@ -721,22 +753,22 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                         Icon(
                           isOptimal ? Icons.flag : Icons.timer,
                           color: Colors.white,
-                          size: 28,
+                          size: 14,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 4),
                         Text(
                           isOptimal ? 'C\'EST LE MOMENT !' : 'ATTENDRE...',
                           style: const TextStyle(
-                            fontSize: 24,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
-                            letterSpacing: 1.5,
+                            letterSpacing: 0.8,
                           ),
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 3),
 
                     // Percentage display
                     Row(
@@ -745,43 +777,43 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                         Text(
                           '$percentage%',
                           style: const TextStyle(
-                            fontSize: 32,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 4),
                         Text(
                           'SEUIL: $threshold%',
                           style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white.withOpacity(0.9),
-                            letterSpacing: 0.8,
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.9),
+                            letterSpacing: 0.4,
                           ),
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
 
                     // Progress bar
                     Container(
-                      height: 8,
+                      height: 4,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
-                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                        color: Colors.white.withValues(alpha: 0.3),
                       ),
                       child: FractionallySizedBox(
                         alignment: Alignment.centerLeft,
                         widthFactor: (percentage / 100).clamp(0.0, 1.0),
                         child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(2),
                             color: Colors.white,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.white.withOpacity(0.5),
-                                blurRadius: 8,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                blurRadius: 4,
                               ),
                             ],
                           ),
@@ -809,14 +841,14 @@ class CheckeredPatternPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint();
     const squareSize = 12.0;
-    
+
     // S'assurer que l'opacity est dans la plage valide
     final validOpacity = opacity.clamp(0.0, 1.0);
 
     for (double x = 0; x < size.width; x += squareSize * 2) {
       for (double y = 0; y < size.height; y += squareSize * 2) {
         // White squares
-        paint.color = Colors.white.withOpacity(validOpacity);
+        paint.color = Colors.white.withValues(alpha: validOpacity);
         canvas.drawRect(Rect.fromLTWH(x, y, squareSize, squareSize), paint);
         canvas.drawRect(
           Rect.fromLTWH(x + squareSize, y + squareSize, squareSize, squareSize),

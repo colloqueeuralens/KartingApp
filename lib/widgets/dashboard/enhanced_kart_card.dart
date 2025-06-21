@@ -86,7 +86,7 @@ class _EnhancedKartCardState extends State<EnhancedKartCard>
     super.didUpdateWidget(oldWidget);
 
     // Gérer les changements d'état d'animation
-    if (widget.isOptimal != oldWidget.isOptimal || 
+    if (widget.isOptimal != oldWidget.isOptimal ||
         widget.disablePulseAnimation != oldWidget.disablePulseAnimation) {
       if (widget.isOptimal && !widget.disablePulseAnimation) {
         _pulseController.repeat(reverse: true);
@@ -182,7 +182,9 @@ class _EnhancedKartCardState extends State<EnhancedKartCard>
             return Transform.scale(
               scale:
                   _scaleAnimation.value *
-                  (widget.isOptimal && !widget.disablePulseAnimation ? _pulseAnimation.value : 1.0),
+                  (widget.isOptimal && !widget.disablePulseAnimation
+                      ? _pulseAnimation.value
+                      : 1.0),
               child: Container(
                 decoration: BoxDecoration(
                   color: widget.backgroundColor,

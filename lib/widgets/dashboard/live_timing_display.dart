@@ -42,11 +42,11 @@ class _LiveTimingDisplayState extends State<LiveTimingDisplay>
   @override
   void didUpdateWidget(LiveTimingDisplay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // Animation lors d'une mise à jour en direct
-    if (widget.isLiveUpdate && 
-        (widget.lapTime != oldWidget.lapTime || 
-         widget.position != oldWidget.position)) {
+    if (widget.isLiveUpdate &&
+        (widget.lapTime != oldWidget.lapTime ||
+            widget.position != oldWidget.position)) {
       _updateController.forward().then((_) {
         _updateController.reverse();
       });
@@ -67,13 +67,11 @@ class _LiveTimingDisplayState extends State<LiveTimingDisplay>
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _colorAnimation.value?.withOpacity(0.1) ?? 
-                   Colors.grey[100],
+            color:
+                _colorAnimation.value?.withValues(alpha: 0.1) ??
+                Colors.grey[100],
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.grey[300]!,
-              width: 1,
-            ),
+            border: Border.all(color: Colors.grey[300]!, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,10 +90,10 @@ class _LiveTimingDisplayState extends State<LiveTimingDisplay>
                     ),
                 ],
               ),
-              
+
               if (widget.bestTime != null || widget.gap != null)
                 const SizedBox(height: 12),
-              
+
               // Temps secondaires
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -106,8 +104,7 @@ class _LiveTimingDisplayState extends State<LiveTimingDisplay>
                       label: 'Meilleur T.',
                       isPrimary: false,
                     ),
-                  if (widget.gap != null)
-                    GapDisplay(gap: widget.gap!),
+                  if (widget.gap != null) GapDisplay(gap: widget.gap!),
                 ],
               ),
             ],
@@ -122,21 +119,18 @@ class _LiveTimingDisplayState extends State<LiveTimingDisplay>
 class PositionBadge extends StatelessWidget {
   final int position;
 
-  const PositionBadge({
-    super.key,
-    required this.position,
-  });
+  const PositionBadge({super.key, required this.position});
 
   Color _getPositionColor() {
     switch (position) {
       case 1:
         return Colors.amber[600]!; // Or
       case 2:
-        return Colors.grey[400]!;  // Argent
+        return Colors.grey[400]!; // Argent
       case 3:
         return Colors.brown[400]!; // Bronze
       default:
-        return Colors.blue[600]!;  // Autre
+        return Colors.blue[600]!; // Autre
     }
   }
 
@@ -148,13 +142,10 @@ class PositionBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: _getPositionColor(),
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white,
-          width: 2,
-        ),
+        border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: _getPositionColor().withOpacity(0.3),
+            color: _getPositionColor().withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -230,13 +221,13 @@ class RacingTimeDisplay extends StatelessWidget {
     if (time.contains(':') && time.contains('.')) {
       return time;
     }
-    
+
     // Sinon, essayer de le formatter
     try {
       final double seconds = double.parse(time);
       final int minutes = (seconds / 60).floor();
       final double remainingSeconds = seconds % 60;
-      
+
       return '${minutes}:${remainingSeconds.toStringAsFixed(3).padLeft(6, '0')}';
     } catch (e) {
       return time; // Retourner tel quel si parsing échoue
@@ -248,15 +239,12 @@ class RacingTimeDisplay extends StatelessWidget {
 class GapDisplay extends StatelessWidget {
   final String gap;
 
-  const GapDisplay({
-    super.key,
-    required this.gap,
-  });
+  const GapDisplay({super.key, required this.gap});
 
   @override
   Widget build(BuildContext context) {
     final bool isPositive = !gap.startsWith('-');
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [

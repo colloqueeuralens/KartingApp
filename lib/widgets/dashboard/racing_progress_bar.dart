@@ -31,35 +31,28 @@ class _RacingProgressBarState extends State<RacingProgressBar>
   @override
   void initState() {
     super.initState();
-    
+
     _progressController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
 
-    _progressAnimation = Tween<double>(
-      begin: 0.0,
-      end: widget.progress,
-    ).animate(CurvedAnimation(
-      parent: _progressController,
-      curve: Curves.easeInOut,
-    ));
+    _progressAnimation = Tween<double>(begin: 0.0, end: widget.progress)
+        .animate(
+          CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
+        );
 
-    _pulseAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     _progressController.forward();
-    
+
     if (widget.isOptimalMoment) {
       _pulseController.repeat(reverse: true);
     }
@@ -68,19 +61,19 @@ class _RacingProgressBarState extends State<RacingProgressBar>
   @override
   void didUpdateWidget(RacingProgressBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // Animer vers la nouvelle valeur
-    _progressAnimation = Tween<double>(
-      begin: _progressAnimation.value,
-      end: widget.progress,
-    ).animate(CurvedAnimation(
-      parent: _progressController,
-      curve: Curves.easeInOut,
-    ));
-    
+    _progressAnimation =
+        Tween<double>(
+          begin: _progressAnimation.value,
+          end: widget.progress,
+        ).animate(
+          CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
+        );
+
     _progressController.reset();
     _progressController.forward();
-    
+
     // Gérer l'animation pulse
     if (widget.isOptimalMoment && !_pulseController.isAnimating) {
       _pulseController.repeat(reverse: true);
@@ -114,15 +107,15 @@ class _RacingProgressBarState extends State<RacingProgressBar>
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: widget.isOptimalMoment 
-                    ? Colors.green[300]! 
+                color: widget.isOptimalMoment
+                    ? Colors.green[300]!
                     : Colors.grey[300]!,
                 width: widget.isOptimalMoment ? 2 : 1,
               ),
-              boxShadow: widget.isOptimalMoment 
+              boxShadow: widget.isOptimalMoment
                   ? [
                       BoxShadow(
-                        color: Colors.green.withOpacity(0.3),
+                        color: Colors.green.withValues(alpha: 0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -141,8 +134,8 @@ class _RacingProgressBarState extends State<RacingProgressBar>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: widget.isOptimalMoment 
-                            ? Colors.green[700] 
+                        color: widget.isOptimalMoment
+                            ? Colors.green[700]
                             : Colors.grey[700],
                       ),
                     ),
@@ -152,8 +145,8 @@ class _RacingProgressBarState extends State<RacingProgressBar>
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: widget.isOptimalMoment 
-                            ? Colors.green[600] 
+                        color: widget.isOptimalMoment
+                            ? Colors.green[600]
                             : Colors.grey[600],
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -168,9 +161,9 @@ class _RacingProgressBarState extends State<RacingProgressBar>
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Barre de progression principale
                 Container(
                   height: 12,
@@ -191,7 +184,7 @@ class _RacingProgressBarState extends State<RacingProgressBar>
                           painter: RacingPatternPainter(),
                         ),
                       ),
-                      
+
                       // Barre de progression
                       FractionallySizedBox(
                         widthFactor: _progressAnimation.value,
@@ -205,9 +198,11 @@ class _RacingProgressBarState extends State<RacingProgressBar>
                             borderRadius: BorderRadius.circular(6),
                             boxShadow: [
                               BoxShadow(
-                                color: (widget.isOptimalMoment 
-                                    ? Colors.green 
-                                    : Colors.blue).withOpacity(0.3),
+                                color:
+                                    (widget.isOptimalMoment
+                                            ? Colors.green
+                                            : Colors.blue)
+                                        .withValues(alpha: 0.3),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               ),
@@ -218,33 +213,30 @@ class _RacingProgressBarState extends State<RacingProgressBar>
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 8),
-                
+
                 // Informations détaillées
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       widget.thresholdText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                     Text(
                       '${(_progressAnimation.value * 100).toInt()}%',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: widget.isOptimalMoment 
-                            ? Colors.green[700] 
+                        color: widget.isOptimalMoment
+                            ? Colors.green[700]
                             : Colors.grey[700],
                       ),
                     ),
                   ],
                 ),
-                
+
                 // Message moment optimal
                 if (widget.isOptimalMoment)
                   Container(
@@ -328,11 +320,7 @@ class ThresholdIndicator extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.flag,
-            size: 14,
-            color: Colors.orange[700],
-          ),
+          Icon(Icons.flag, size: 14, color: Colors.orange[700]),
           const SizedBox(width: 4),
           Text(
             '$label: ${(threshold * 100).toInt()}%',
