@@ -23,6 +23,7 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   Map<String, dynamic>? _lastTimingData;
   Map<String, dynamic>? _circuitStatus;
   String? _errorMessage;
+  String? _lastRawMessage;
 
   @override
   void initState() {
@@ -73,6 +74,8 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
             setState(() {
               _lastTimingData = data;
               _errorMessage = null;
+              // Stocker aussi le message brut pour affichage debug
+              _lastRawMessage = data.toString();
             });
           }
         });
@@ -541,6 +544,105 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
                             fontFamily: 'monospace',
                             color: RacingTheme.racingGreen,
                           ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Message WebSocket brut (NOUVEAU POUR DEBUG)
+              if (_lastRawMessage != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade900.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.purple.withValues(alpha: 0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.wifi,
+                            color: Colors.purple,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'MESSAGE WEBSOCKET BRUT (DEBUG)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple,
+                              fontSize: 14,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        constraints: const BoxConstraints(maxHeight: 300),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            _lastRawMessage!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              color: Colors.purple,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Informations supplémentaires sur le message
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade800.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Longueur: ${_lastRawMessage!.length} caractères',
+                              style: const TextStyle(
+                                color: Colors.purple,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                            Text(
+                              'Contient "grid||": ${_lastRawMessage!.contains("grid||")}',
+                              style: const TextStyle(
+                                color: Colors.purple,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                            Text(
+                              'Contient "init": ${_lastRawMessage!.contains("init")}',
+                              style: const TextStyle(
+                                color: Colors.purple,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

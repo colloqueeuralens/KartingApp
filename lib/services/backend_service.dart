@@ -187,6 +187,10 @@ class LiveTimingWebSocketService {
   static const Duration _reconnectDelay = Duration(seconds: 5);
   static const Duration _pingInterval = Duration(seconds: 30);
 
+  // NOUVEAU: Cache pour accumuler toutes les données des karts
+  final Map<String, Map<String, dynamic>> _kartDataCache = {};
+  int _messageCounter = 0;
+
   /// Stream des données de timing en temps réel
   Stream<Map<String, dynamic>>? get stream => _controller?.stream;
 
@@ -251,47 +255,112 @@ class LiveTimingWebSocketService {
 
     _currentCircuitId = null;
     _reconnectAttempts = 0;
-    print('WebSocket disconnected');
+
+    // NOUVEAU: Vider le cache lors de la déconnexion
+    _kartDataCache.clear();
+    _messageCounter = 0;
+    print('WebSocket disconnected - Cache des karts vidé');
   }
 
   /// Gérer les messages reçus
   void _handleMessage(dynamic message) {
     try {
-      print('=== MESSAGE WEBSOCKET BRUT COMPLET ===');
-      print(message.toString());
-      print('=======================================');
+      final Map<String, dynamic> parsed = json.decode(message);
 
-      final Map<String, dynamic> data = json.decode(message);
-      print('=== DONNÉES JSON PARSÉES ===');
-      print(json.encode(data));
-      print('============================');
-      print('Parsed WebSocket message type: ${data['type']}');
+      // Accès robuste aux drivers selon la structure reçue
+      Map<String, dynamic>? drivers;
+
+      // Tenter d'accéder aux drivers selon différentes structures possibles
+      if (parsed.containsKey('drivers')) {
+        drivers = parsed['drivers'] as Map<String, dynamic>?;
+      } else if (parsed.containsKey('data') && parsed['data'] != null) {
+        final Map<String, dynamic> dataSection =
+            parsed['data'] as Map<String, dynamic>;
+        drivers = dataSection['drivers'] as Map<String, dynamic>?;
+      } else if (parsed.containsKey('karting_data') &&
+          parsed['karting_data'] != null) {
+        final Map<String, dynamic> kartingSection =
+            parsed['karting_data'] as Map<String, dynamic>;
+        drivers = kartingSection['drivers'] as Map<String, dynamic>?;
+      }
+
+      if (drivers == null) {
+        print(json.encode(parsed));
+        return;
+      }
+
+      // NOUVEAU: Mettre à jour le cache avec les nouvelles données (FUSION INTELLIGENTE)
+      _messageCounter++;
+      drivers.forEach((kartId, stats) {
+        if (stats is Map<String, dynamic>) {
+          // Fusion intelligente : conserver les données existantes + mettre à jour les nouvelles
+          if (_kartDataCache.containsKey(kartId)) {
+            // Le kart existe déjà : fusionner les nouvelles données avec les existantes
+            _kartDataCache[kartId]!.addAll(Map<String, dynamic>.from(stats));
+          } else {
+            // Nouveau kart : créer l'entrée complète
+            _kartDataCache[kartId] = Map<String, dynamic>.from(stats);
+          }
+        }
+      });
+
+      // NOUVEAU: Afficher la totalité du cache à chaque message
+      print('');
+      print(
+        '🏁 ====== MESSAGE #$_messageCounter - ÉTAT COMPLET DE TOUS LES KARTS ======',
+      );
+      print('📊 Total karts suivis: ${_kartDataCache.length}');
+      print('');
+
+      // Trier les karts par numéro pour un affichage ordonné
+      final sortedKarts = _kartDataCache.entries.toList();
+      sortedKarts.sort((a, b) {
+        // Essayer de trier par position/classement si disponible
+        final classementA = a.value['Classement']?.toString() ?? '999';
+        final classementB = b.value['Classement']?.toString() ?? '999';
+        try {
+          return int.parse(classementA).compareTo(int.parse(classementB));
+        } catch (e) {
+          // Si pas numérique, trier par ID de kart
+          return a.key.compareTo(b.key);
+        }
+      });
+
+      sortedKarts.forEach((entry) {
+        final kartId = entry.key;
+        final stats = entry.value;
+
+        print('🏎️  KART #$kartId:');
+        stats.forEach((field, value) {
+          print('    • $field → $value');
+        });
+        print('');
+      });
+
+      print('🏁 ====== FIN ÉTAT COMPLET ======');
+      print('');
 
       // Ignorer les pongs
-      if (data['type'] == 'pong') {
+      if (parsed['type'] == 'pong') {
         print('Received pong from server');
         return;
       }
 
       // Transmettre les données de timing
-      if (data['type'] == 'timing_data' &&
+      if (parsed['type'] == 'karting_data' &&
           _controller != null &&
           !_controller!.isClosed) {
-        print('=== DONNÉES TIMING TRANSMISES AU STREAM ===');
-        print(json.encode(data));
-        print('=========================================');
-        print('Forwarding timing data to stream');
-        _controller!.add(data);
+        _controller!.add(parsed);
       }
 
       // Gérer les mises à jour de statut
-      if (data['type'] == 'status_update') {
-        print('Status update: ${data['status']}');
+      if (parsed['type'] == 'status_update') {
+        print('Status update: ${parsed['status']}');
       }
 
       // Gérer les erreurs
-      if (data['type'] == 'error') {
-        print('Backend error: ${data['error']}');
+      if (parsed['type'] == 'error') {
+        print('Backend error: ${parsed['error']}');
       }
     } catch (e) {
       print('Error parsing WebSocket message: $e');

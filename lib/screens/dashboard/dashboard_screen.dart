@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/common/app_bar_actions.dart';
-import '../../widgets/dashboard/kart_grid_view.dart';
+import '../../widgets/dashboard/racing_kart_grid_view.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
 import '../../theme/racing_theme.dart';
@@ -44,7 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       vsync: this,
     );
     _headerAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _headerController, curve: Curves.easeOutBack),
+      CurvedAnimation(parent: _headerController, curve: Curves.easeOut),
     );
 
     _headerController.forward();
@@ -323,9 +323,9 @@ class _DashboardScreenState extends State<DashboardScreen>
               else
                 _buildRacingHeader(null),
 
-              // Grille des karts
+              // Grille des karts avec style racing
               Expanded(
-                child: KartGridView(
+                child: RacingKartGridView(
                   numColumns: cols,
                   numRows: rows,
                   columnColors: colors,

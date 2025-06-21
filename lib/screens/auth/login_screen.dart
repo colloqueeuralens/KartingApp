@@ -44,7 +44,10 @@ class _LoginScreenState extends State<LoginScreen>
       vsync: this,
     );
     _formSlide = Tween<double>(begin: 1, end: 0).animate(
-      CurvedAnimation(parent: _formController, curve: Curves.easeOutBack),
+      CurvedAnimation(
+        parent: _formController,
+        curve: Curves.easeOut, // ← plus d’overshoot
+      ),
     );
 
     // Background animation controller
@@ -115,11 +118,7 @@ class _LoginScreenState extends State<LoginScreen>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.grey.shade100,
-            Colors.grey.shade50,
-            Colors.white,
-          ],
+          colors: [Colors.grey.shade100, Colors.grey.shade50, Colors.white],
         ),
       ),
     );
@@ -127,11 +126,10 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget _buildLogo() {
     return Container(
-      width: 100,
-      height: 100,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.grey.shade700,
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withValues(alpha: 0.3),
@@ -140,10 +138,29 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ],
       ),
-      child: const Icon(
-        Icons.sports_motorsports,
-        color: Colors.white,
-        size: 50,
+      child: ClipOval(
+        child: Image.asset(
+          'assets/images/KMRS.jpg',
+          width: 120,
+          height: 120,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            // Fallback en cas d'erreur de chargement
+            return Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey.shade700,
+              ),
+              child: const Icon(
+                Icons.sports_motorsports,
+                color: Colors.white,
+                size: 60,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -332,36 +349,40 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // Background
-          Positioned.fill(child: _buildBackground()),
+      body: SizedBox.expand(
+        child: Stack(
+          children: [
+            // Background
+            Positioned.fill(child: _buildBackground()),
 
-          // Main Content
-          SafeArea(
-            child: Column(
-              children: [
-                // Titres en haut
-                Padding(
-                  padding: const EdgeInsets.only(top: 60, bottom: 40),
-                  child: _buildTitle(),
+            // Main Content
+            SafeArea(
+              child: SizedBox(
+                width: double.infinity,
+                height: double.infinity,
+                child: Column(
+                  children: [
+                    // Titres en haut
+                    Padding(
+                      padding: const EdgeInsets.only(top: 60, bottom: 40),
+                      child: _buildTitle(),
+                    ),
+
+                    // Logo au centre
+                    _buildLogo(),
+
+                    const SizedBox(height: 60),
+
+                    // Form en bas
+                    Expanded(
+                      child: SingleChildScrollView(child: _buildLoginForm()),
+                    ),
+                  ],
                 ),
-                
-                // Logo au centre
-                _buildLogo(),
-                
-                const SizedBox(height: 60),
-                
-                // Form en bas
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: _buildLoginForm(),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

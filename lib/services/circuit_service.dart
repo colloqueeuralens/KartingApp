@@ -69,6 +69,35 @@ class CircuitService {
     return query.docs.isNotEmpty;
   }
 
+  /// Vérifie si un circuit a des mappings null/vides (nécessite une configuration manuelle)
+  static bool hasNullMappings(Map<String, dynamic> circuitData) {
+    int nullCount = 0;
+    for (int i = 1; i <= 14; i++) {
+      final value = circuitData['c$i'];
+      if (value == null || value == 'Non utilisé' || value.toString().trim().isEmpty) {
+        nullCount++;
+      }
+    }
+    // Si moins de 3 colonnes sont configurées, considérer comme nécessitant une configuration
+    final configuredCount = 14 - nullCount;
+    return configuredCount < 3;
+  }
+
+  /// Met à jour les mappings d'un circuit existant
+  static Future<void> updateCircuitMappings(String circuitId, Map<String, String> mappings) async {
+    final updateData = <String, dynamic>{};
+    
+    // Mettre à jour C1-C14 avec les nouveaux mappings
+    for (int i = 1; i <= 14; i++) {
+      final key = 'c$i';
+      updateData[key] = mappings[key] ?? 'Non utilisé';
+    }
+    
+    updateData['updatedAt'] = FieldValue.serverTimestamp();
+    
+    await _collection.doc(circuitId).update(updateData);
+  }
+
   /// Importe des circuits depuis un fichier JSON
   static Future<Map<String, int>> importCircuitsFromJson(String jsonContent) async {
     try {

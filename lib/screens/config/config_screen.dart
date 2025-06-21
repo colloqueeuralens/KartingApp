@@ -5,6 +5,7 @@ import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
 import '../../theme/racing_theme.dart';
 import '../circuit/create_circuit_screen.dart';
+import '../circuit/configure_circuit_mappings_screen.dart';
 
 /// Écran de configuration avec design racing et interface multi-étapes
 class ConfigScreen extends StatefulWidget {
@@ -506,49 +507,147 @@ class _ConfigScreenState extends State<ConfigScreen>
 
                             return Column(
                               children: [
-                                // Dropdown circuit
+                                // Liste des circuits avec indicateurs de statut
                                 Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: Colors.grey.shade300,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      isExpanded: true,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                      ),
-                                      hint: const Text(
-                                        'Sélectionner un circuit',
-                                      ),
-                                      value:
-                                          circuits.any(
-                                            (doc) =>
-                                                doc.id == _selectedCircuitId,
-                                          )
-                                          ? _selectedCircuitId
-                                          : null,
-                                      items: circuits.map((doc) {
-                                        return DropdownMenuItem(
-                                          value: doc.id,
-                                          child: Text(
-                                            doc.data()['nom'] ??
-                                                'Circuit sans nom',
-                                            overflow: TextOverflow.ellipsis,
+                                  constraints: const BoxConstraints(maxHeight: 300),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: circuits.length,
+                                    itemBuilder: (context, index) {
+                                      final doc = circuits[index];
+                                      final circuitData = doc.data();
+                                      final circuitName = circuitData['nom'] ?? 'Circuit sans nom';
+                                      final needsConfiguration = CircuitService.hasNullMappings(circuitData);
+                                      final isSelected = doc.id == _selectedCircuitId;
+
+                                      return Card(
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        color: isSelected 
+                                          ? Colors.blue.withValues(alpha: 0.1) 
+                                          : needsConfiguration 
+                                            ? Colors.orange.withValues(alpha: 0.05)
+                                            : null,
+                                        child: ListTile(
+                                          leading: Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: needsConfiguration 
+                                                ? Colors.orange.withValues(alpha: 0.1)
+                                                : Colors.green.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: needsConfiguration ? Colors.orange : Colors.green,
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              needsConfiguration ? Icons.warning : Icons.check_circle,
+                                              color: needsConfiguration ? Colors.orange : Colors.green,
+                                              size: 20,
+                                            ),
                                           ),
-                                        );
-                                      }).toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _selectedCircuitId = value;
-                                        });
-                                      },
-                                    ),
+                                          title: Text(
+                                            circuitName,
+                                            style: TextStyle(
+                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                            ),
+                                          ),
+                                          subtitle: Text(
+                                            needsConfiguration 
+                                              ? '⚠️ Configuration requise'
+                                              : '✅ Prêt à utiliser',
+                                            style: TextStyle(
+                                              color: needsConfiguration ? Colors.orange.shade700 : Colors.green.shade700,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (needsConfiguration)
+                                                TextButton.icon(
+                                                  onPressed: () async {
+                                                    final result = await Navigator.of(context).push<bool>(
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ConfigureCircuitMappingsScreen(
+                                                          circuitId: doc.id,
+                                                          circuitName: circuitName,
+                                                          currentMappings: circuitData,
+                                                        ),
+                                                      ),
+                                                    );
+                                                    
+                                                    // Si la configuration a été sauvegardée, on peut rafraîchir
+                                                    if (result == true) {
+                                                      // Le StreamBuilder se rafraîchira automatiquement
+                                                    }
+                                                  },
+                                                  icon: const Icon(Icons.settings, size: 16),
+                                                  label: const Text('Configurer'),
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: Colors.orange.shade700,
+                                                  ),
+                                                ),
+                                              Radio<String>(
+                                                value: doc.id,
+                                                groupValue: _selectedCircuitId,
+                                                onChanged: needsConfiguration 
+                                                  ? null // Désactiver la sélection si configuration requise
+                                                  : (value) {
+                                                      setState(() {
+                                                        _selectedCircuitId = value;
+                                                      });
+                                                    },
+                                              ),
+                                            ],
+                                          ),
+                                          onTap: needsConfiguration 
+                                            ? null 
+                                            : () {
+                                                setState(() {
+                                                  _selectedCircuitId = doc.id;
+                                                });
+                                              },
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ),
+
+                                const SizedBox(height: 16),
+
+                                // Aide contextuelle sur les statuts
+                                if (circuits.any((doc) => CircuitService.hasNullMappings(doc.data())))
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.info, color: Colors.blue, size: 16),
+                                            const SizedBox(width: 6),
+                                            const Text(
+                                              'Statuts des circuits',
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          '• ✅ Prêt à utiliser : Configuration automatique détectée\n'
+                                          '• ⚠️ Configuration requise : Mappings manuels nécessaires',
+                                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
 
                                 const SizedBox(height: 16),
 
