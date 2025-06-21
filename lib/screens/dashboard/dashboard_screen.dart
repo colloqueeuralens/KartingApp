@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/common/app_bar_actions.dart';
 import '../../widgets/dashboard/racing_kart_grid_view.dart';
+import '../../widgets/dashboard/optimal_moment_indicator.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
 import '../../theme/racing_theme.dart';
@@ -26,6 +27,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin {
   late AnimationController _headerController;
   late Animation<double> _headerAnimation;
+
+  // État de l'indicateur de performance
+  bool _isOptimal = false;
+  int _percentage = 0;
+  int _threshold = 100;
 
   static const Map<String, Color> _nameToColor = {
     'Bleu': Colors.blue,
@@ -56,7 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.dispose();
   }
 
-  Widget _buildRacingHeader(String? circuitName) {
+  Widget _buildHeaderWithIndicator(String? circuitName) {
     return AnimatedBuilder(
       animation: _headerAnimation,
       builder: (context, child) {
@@ -66,100 +72,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             opacity: _headerAnimation.value,
             child: Container(
               margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: RacingTheme.racingGradient,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: RacingTheme.racingShadow,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    children: [
-                      // Racing stripes background
-                      CustomPaint(
-                        painter: RacingStripesPainter(),
-                        child: Container(),
-                      ),
-
-                      // Content
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          children: [
-                            // Racing dashboard header
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.sports_motorsports,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'KMRS RACING DASHBOARD',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 1.2,
-                                        ),
-                                      ),
-                                      if (circuitName != null)
-                                        Text(
-                                          circuitName.toUpperCase(),
-                                          style: TextStyle(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.9,
-                                            ),
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.8,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                // Racing timer icon
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.timer,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              child: OptimalMomentIndicator(
+                isOptimal: _isOptimal,
+                percentage: _percentage,
+                threshold: _threshold,
+                circuitName: circuitName,
               ),
             ),
           ),
@@ -167,6 +84,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       },
     );
   }
+
 
   Widget _buildEmptyState() {
     return Center(
@@ -312,16 +230,16 @@ class _DashboardScreenState extends State<DashboardScreen>
 
           return Column(
             children: [
-              // Header racing avec nom du circuit
+              // Row combinant header et indicateur de performance
               if (selectedCircuitId != null)
                 FutureBuilder<String?>(
                   future: CircuitService.getCircuitName(selectedCircuitId),
                   builder: (context, snapshot) {
-                    return _buildRacingHeader(snapshot.data);
+                    return _buildHeaderWithIndicator(snapshot.data);
                   },
                 )
               else
-                _buildRacingHeader(null),
+                _buildHeaderWithIndicator(null),
 
               // Grille des karts avec style racing
               Expanded(
@@ -330,6 +248,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                   numRows: rows,
                   columnColors: colors,
                   readOnly: widget.readOnly,
+                  onPerformanceUpdate: (isOptimal, percentage, threshold) {
+                    setState(() {
+                      _isOptimal = isOptimal;
+                      _percentage = percentage;
+                      _threshold = threshold;
+                    });
+                  },
                 ),
               ),
             ],
@@ -338,29 +263,4 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
     );
   }
-}
-
-/// Custom painter pour les rayures de racing
-class RacingStripesPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-    const stripeHeight = 3.0;
-    const spacing = 12.0;
-
-    // Rayures diagonales
-    for (double y = -size.width; y < size.height + size.width; y += spacing) {
-      paint.color = Colors.white.withValues(alpha: 0.1);
-      final path = Path();
-      path.moveTo(0, y);
-      path.lineTo(size.width, y - size.width * 0.3);
-      path.lineTo(size.width, y - size.width * 0.3 + stripeHeight);
-      path.lineTo(0, y + stripeHeight);
-      path.close();
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
