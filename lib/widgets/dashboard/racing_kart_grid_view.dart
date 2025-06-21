@@ -324,16 +324,20 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
 
   void _checkOptimalMoment(bool isOptimal, bool wasOptimal) {
     if (isOptimal && !wasOptimal && !_showOptimalNotification) {
-      // Déclenchement du moment optimal
-      setState(() {
-        _showOptimalNotification = true;
-      });
-      
-      // Auto-hide après 5 secondes
-      Future.delayed(const Duration(seconds: 5), () {
+      // Utiliser addPostFrameCallback pour éviter setState pendant build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
-            _showOptimalNotification = false;
+            _showOptimalNotification = true;
+          });
+          
+          // Auto-hide après 5 secondes
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted) {
+              setState(() {
+                _showOptimalNotification = false;
+              });
+            }
           });
         }
       });
