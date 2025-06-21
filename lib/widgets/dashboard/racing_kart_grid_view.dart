@@ -5,7 +5,6 @@ import '../../services/session_service.dart';
 import '../../theme/racing_theme.dart';
 import 'racing_kart_card.dart';
 import 'empty_kart_slot.dart';
-import 'racing_progress_bar.dart';
 import '../common/glassmorphism_container.dart';
 
 /// Classe pour transporter les données du kart pendant le drag & drop
@@ -224,12 +223,8 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                     underline: const SizedBox.shrink(),
                     items: opts.map((p) => DropdownMenuItem(
                       value: p,
-                      child: Row(
-                        children: [
-                          PerformanceIndicator(performance: p),
-                          const SizedBox(width: 8),
-                          Text(p, style: const TextStyle(fontSize: 18)),
-                        ],
+                      child: Center(
+                        child: PerformanceIndicator(performance: p),
                       ),
                     )).toList(),
                     onChanged: (v) => setDialog(() => selPerf = v),
@@ -428,14 +423,8 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
           children: [
             Column(
               children: [
-                // Barre de progression racing
-                RacingProgressBar(
-                  progress: pct / 100,
-                  totalKarts: widget.numColumns,
-                  goodPerformanceKarts: good,
-                  thresholdText: 'Seuil: $threshold%',
-                  isOptimalMoment: isOpt,
-                ),
+                // Indicateur de moment optimal (style original)
+                _buildOptimalMomentIndicator(isOpt, pct, threshold),
                 
                 // Grille des karts
                 Expanded(
@@ -543,7 +532,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                                             child: RacingKartCard(
                                               kartNumber: number.toString(),
                                               performance: perf,
-                                              color: widget.columnColors[col],
+                                              color: RacingTheme.getPerformanceColor(perf),
                                               isOptimalMoment: isKartOptimal && isOpt,
                                               showPulse: showPulse,
                                               onTap: widget.readOnly
@@ -571,7 +560,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                                                     child: RacingKartCard(
                                                       kartNumber: number.toString(),
                                                       performance: perf,
-                                                      color: widget.columnColors[col],
+                                                      color: RacingTheme.getPerformanceColor(perf),
                                                       isOptimalMoment: false,
                                                       showPulse: false,
                                                     ),
@@ -640,5 +629,201 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
         );
       },
     );
+  }
+
+  Widget _buildOptimalMomentIndicator(
+    bool isOptimal,
+    int percentage,
+    int threshold,
+  ) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: isOptimal
+            ? RacingTheme.successGradient
+            : LinearGradient(
+                colors: [RacingTheme.bad, RacingTheme.poor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: isOptimal
+            ? RacingTheme.racingShadow
+            : RacingTheme.darkShadow,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.3),
+            width: 2,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            children: [
+              // Racing pattern background
+              if (isOptimal)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: CheckeredPatternPainter(opacity: 0.2),
+                  ),
+                ),
+
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    // Racing lights row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        final lightOn =
+                            isOptimal || index < (percentage / 20).floor();
+                        return Container(
+                          width: 16,
+                          height: 16,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: lightOn
+                                ? (isOptimal
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.7))
+                                : Colors.white.withOpacity(0.3),
+                            boxShadow: lightOn
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.white.withOpacity(0.5),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                        );
+                      }),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Status message
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          isOptimal ? Icons.flag : Icons.timer,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          isOptimal ? 'C\'EST LE MOMENT !' : 'ATTENDRE...',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Percentage display
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$percentage%',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'SEUIL: $threshold%',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white.withOpacity(0.9),
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Progress bar
+                    Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: Colors.white.withOpacity(0.3),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (percentage / 100).clamp(0.0, 1.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.5),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom painter for checkered pattern (optimal state)
+class CheckeredPatternPainter extends CustomPainter {
+  final double opacity;
+
+  CheckeredPatternPainter({required this.opacity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    const squareSize = 12.0;
+    
+    // S'assurer que l'opacity est dans la plage valide
+    final validOpacity = opacity.clamp(0.0, 1.0);
+
+    for (double x = 0; x < size.width; x += squareSize * 2) {
+      for (double y = 0; y < size.height; y += squareSize * 2) {
+        // White squares
+        paint.color = Colors.white.withOpacity(validOpacity);
+        canvas.drawRect(Rect.fromLTWH(x, y, squareSize, squareSize), paint);
+        canvas.drawRect(
+          Rect.fromLTWH(x + squareSize, y + squareSize, squareSize, squareSize),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(CheckeredPatternPainter oldDelegate) {
+    return oldDelegate.opacity != opacity;
   }
 }

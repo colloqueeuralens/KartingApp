@@ -113,7 +113,7 @@ class _RacingKartCardState extends State<RacingKartCard>
               onTap: widget.onTap,
               child: Container(
                 width: 120,
-                height: 80,
+                height: 110,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -164,7 +164,7 @@ class _RacingKartCardState extends State<RacingKartCard>
                     
                     // Contenu principal
                     Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
