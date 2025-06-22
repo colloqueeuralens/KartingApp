@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/common/app_bar_actions.dart';
+import '../../widgets/common/glassmorphism_container.dart';
+import '../../widgets/live_timing/live_timing_table.dart';
+import '../../widgets/live_timing/debug_sections.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
 import '../../services/backend_service.dart';
@@ -24,6 +27,8 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   Map<String, dynamic>? _circuitStatus;
   String? _errorMessage;
   String? _lastRawMessage;
+  Map<String, Map<String, dynamic>> _driversData = {};
+  String? _currentCircuitName;
 
   @override
   void initState() {
@@ -76,6 +81,11 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
               _errorMessage = null;
               // Stocker aussi le message brut pour affichage debug
               _lastRawMessage = data.toString();
+              // CORRECTION : Utiliser le cache accumulé au lieu des données partielles
+              _driversData = _wsService.allKartsData;
+              print(
+                '📊 TABLEAU: Affichage ${_driversData.length} karts (cache accumulé)',
+              );
             });
           }
         });
@@ -90,18 +100,39 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   }
 
   Future<void> _startTiming(String circuitId) async {
-    final success = await BackendService.startTiming(circuitId);
-    if (success && mounted) {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    // 1. Démarrer le timing backend
+    final timingSuccess = await BackendService.startTiming(circuitId);
+    if (!timingSuccess) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Impossible de démarrer le timing backend';
+        });
+      }
+      return;
+    }
+
+    // 2. Mettre à jour l'état timing
+    if (mounted) {
       setState(() {
         _timingActive = true;
         _errorMessage = null;
       });
-      // Reconnecter au WebSocket après avoir démarré le timing
+    }
+
+    // 3. Se connecter au WebSocket (sans bloquer l'état timing)
+    try {
       await _connectToTiming(circuitId);
-    } else if (mounted) {
-      setState(() {
-        _errorMessage = 'Impossible de démarrer le timing';
-      });
+    } catch (e) {
+      // Timing reste actif même si WebSocket échoue
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Timing démarré mais connexion WebSocket échouée';
+        });
+      }
     }
   }
 
@@ -121,536 +152,274 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   }
 
   Widget _buildTimingControls(String circuitId) {
-    return Container(
+    return GlassmorphismContainer(
       margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: RacingTheme.checkeredGradient,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: RacingTheme.racingShadow,
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.2),
-            width: 1,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              // Header avec statut
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      _backendHealthy
-                          ? Icons.satellite_alt
-                          : Icons.signal_wifi_off,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'CONTRÔLE TIMING',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _backendHealthy
-                                    ? RacingTheme.excellent
-                                    : RacingTheme.bad,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _backendHealthy
-                                  ? 'Backend connecté'
-                                  : 'Backend hors ligne',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _timingActive
-                                    ? RacingTheme.excellent
-                                    : Colors.grey,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _timingActive ? 'Timing actif' : 'Timing inactif',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+      blur: 20,
+      opacity: 0.85,
+      color: RacingTheme.racingBlack,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 600;
 
-              const SizedBox(height: 24),
-
-              // Boutons de contrôle racing
-              Row(
-                children: [
-                  Expanded(
-                    child: _RacingControlButton(
-                      icon: Icons.play_arrow,
-                      label: 'START',
-                      isEnabled: _backendHealthy && !_timingActive,
-                      color: RacingTheme.excellent,
-                      onPressed: () => _startTiming(circuitId),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _RacingControlButton(
-                      icon: Icons.stop,
-                      label: 'STOP',
-                      isEnabled: _backendHealthy && _timingActive,
-                      color: RacingTheme.bad,
-                      onPressed: () => _stopTiming(circuitId),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Bouton WebSocket
-              SizedBox(
-                width: double.infinity,
-                child: _RacingControlButton(
-                  icon: _wsService.isConnected ? Icons.wifi : Icons.wifi_off,
-                  label: _wsService.isConnected
-                      ? 'WEBSOCKET CONNECTÉ'
-                      : 'CONNECTER WEBSOCKET',
-                  isEnabled: true,
-                  color: _wsService.isConnected
-                      ? RacingTheme.racingBlue
-                      : RacingTheme.racingYellow,
-                  onPressed: () => _connectToTiming(circuitId),
-                ),
-              ),
-            ],
-          ),
-        ),
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: 20, // → 20px à gauche et à droite
+              vertical: isWideScreen ? 16 : 12,
+            ),
+            child: isWideScreen
+                ? _buildWideLayout(circuitId)
+                : _buildCompactLayout(circuitId),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildTimingData() {
-    if (_lastTimingData == null) {
-      return Container(
-        margin: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.grey.shade800, Colors.grey.shade900],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: RacingTheme.darkShadow,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.1),
-              width: 1,
-            ),
-          ),
-          child: const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(Icons.timer_off, size: 48, color: Colors.white70),
-                  SizedBox(height: 16),
-                  Text(
-                    'AUCUNE DONNÉE REÇUE',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'En attente des données de timing...',
-                    style: TextStyle(fontSize: 14, color: Colors.white70),
-                  ),
-                ],
+  Widget _buildWideLayout(String circuitId) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _buildCircuitInfo(),
+        _buildActionButtons(circuitId),
+        _buildStatusIndicators(),
+      ],
+    );
+  }
+
+  Widget _buildCompactLayout(String circuitId) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            // Informations (alignées à gauche)
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _buildCircuitInfo(),
               ),
             ),
-          ),
-        ),
-      );
-    }
-
-    final data = _lastTimingData!['data'] as Map<String, dynamic>? ?? {};
-    final mappedData = data['mapped_data'] as Map<String, dynamic>? ?? {};
-    final rawData = data['raw_data'] as Map<String, dynamic>? ?? {};
-    final timestamp = data['timestamp'] as String?;
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            RacingTheme.racingBlack,
-            RacingTheme.racingBlack.withValues(alpha: 0.8),
+            // LEDs (alignées à droite)
+            Align(
+              alignment: Alignment.centerRight,
+              child: _buildStatusIndicators(),
+            ),
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: RacingTheme.racingShadow,
-      ),
+        const SizedBox(height: 12),
+        // Boutons centrés
+        Center(child: _buildActionButtons(circuitId)),
+      ],
+    );
+  }
+
+  Widget _buildCircuitInfo() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Icône + Nom du circuit
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: RacingTheme.racingGreen.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: const Icon(Icons.location_on, color: Colors.white, size: 18),
+        ),
+        const SizedBox(width: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: RichText(
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: _currentCircuitName?.toUpperCase() ?? 'CIRCUIT INCONNU',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                    shadows: [
+                      Shadow(
+                        offset: const Offset(0, 1),
+                        blurRadius: 3,
+                        color: Colors.black.withValues(alpha: 0.8),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(String circuitId) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildCompactButton(
+          icon: Icons.play_arrow,
+          label: 'START',
+          isEnabled: _backendHealthy && !_timingActive,
+          color: RacingTheme.excellent,
+          onPressed: () => _startTiming(circuitId),
+        ),
+        const SizedBox(width: 8),
+        _buildCompactButton(
+          icon: Icons.stop,
+          label: 'STOP',
+          isEnabled: _backendHealthy && _timingActive,
+          color: RacingTheme.bad,
+          onPressed: () => _stopTiming(circuitId),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusIndicators() {
+    return Row(
+      children: [
+        _buildStatusLED(
+          isActive: _backendHealthy,
+          label: 'API',
+          activeColor: RacingTheme.excellent,
+        ),
+        const SizedBox(width: 8),
+        _buildStatusLED(
+          isActive: _timingActive,
+          label: 'TIM',
+          activeColor: RacingTheme.racingGold,
+        ),
+        const SizedBox(width: 8),
+        _buildStatusLED(
+          isActive: _wsService.isConnected,
+          label: 'WS',
+          activeColor: RacingTheme.racingBlue,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusLED({
+    required bool isActive,
+    required String label,
+    required Color activeColor,
+  }) {
+    return Column(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: isActive ? activeColor : Colors.grey.shade600,
+            shape: BoxShape.circle,
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.8),
+                      blurRadius: 6,
+                      spreadRadius: 2,
+                    ),
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      spreadRadius: 3,
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 2,
+                      spreadRadius: 0,
+                    ),
+                  ],
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isActive ? activeColor : Colors.grey.shade400,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactButton({
+    required IconData icon,
+    required String label,
+    required bool isEnabled,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return GestureDetector(
+      onTap: isEnabled ? onPressed : null,
       child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          gradient: isEnabled
+              ? LinearGradient(
+                  colors: [color, color.withValues(alpha: 0.8)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                )
+              : LinearGradient(
+                  colors: [Colors.grey.shade600, Colors.grey.shade700],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: RacingTheme.racingGreen.withValues(alpha: 0.3),
-            width: 2,
+            color: Colors.white.withValues(alpha: 0.4),
+            width: 1.5,
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header du timing board
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: RacingTheme.racingGreen.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.speed,
-                      color: RacingTheme.racingGreen,
-                      size: 24,
-                    ),
+          boxShadow: isEnabled
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.5),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'TIMING BOARD - DONNÉES LIVE',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
                   ),
-                  if (timestamp != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: RacingTheme.racingGreen.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        DateTime.parse(
-                          timestamp,
-                        ).toLocal().toString().substring(11, 19),
-                        style: const TextStyle(
-                          color: RacingTheme.racingGreen,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
                 ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
               ),
-
-              const SizedBox(height: 20),
-
-              // Données mappées avec style F1
-              if (mappedData.isNotEmpty) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: RacingTheme.racingYellow.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.data_array,
-                            color: RacingTheme.racingYellow,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'DONNÉES MAPPÉES (C1-C14)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: RacingTheme.racingYellow,
-                              fontSize: 14,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ...mappedData.entries
-                          .map(
-                            (entry) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 50,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: RacingTheme.racingBlue.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      entry.key,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: RacingTheme.racingBlue,
-                                        fontSize: 12,
-                                        fontFamily: 'monospace',
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      '${entry.value}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontFamily: 'monospace',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Données brutes avec style terminal
-              if (rawData.isNotEmpty) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: RacingTheme.racingGreen.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.terminal,
-                            color: RacingTheme.racingGreen,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'DONNÉES BRUTES',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: RacingTheme.racingGreen,
-                              fontSize: 14,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          rawData.toString(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                            color: RacingTheme.racingGreen,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Message WebSocket brut (NOUVEAU POUR DEBUG)
-              if (_lastRawMessage != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade900.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.purple.withValues(alpha: 0.5),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.wifi,
-                            color: Colors.purple,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'MESSAGE WEBSOCKET BRUT (DEBUG)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.purple,
-                              fontSize: 14,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxHeight: 300),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: SingleChildScrollView(
-                          child: SelectableText(
-                            _lastRawMessage!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              color: Colors.purple,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // Informations supplémentaires sur le message
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.purple.shade800.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Longueur: ${_lastRawMessage!.length} caractères',
-                              style: const TextStyle(
-                                color: Colors.purple,
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                            Text(
-                              'Contient "grid||": ${_lastRawMessage!.contains("grid||")}',
-                              style: const TextStyle(
-                                color: Colors.purple,
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                            Text(
-                              'Contient "init": ${_lastRawMessage!.contains("init")}',
-                              style: const TextStyle(
-                                color: Colors.purple,
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -734,181 +503,41 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
             );
           }
 
-          // Auto-connecter au circuit sélectionné
+          // Récupérer le nom du circuit (sans auto-connexion)
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_wsService.currentCircuitId != selectedCircuitId) {
-              _connectToTiming(selectedCircuitId);
-            }
+            CircuitService.getCircuitName(selectedCircuitId).then((name) {
+              if (mounted && name != null) {
+                setState(() {
+                  _currentCircuitName = name;
+                });
+              }
+            });
           });
 
-          return Column(
-            children: [
-              // Affichage du nom du circuit sélectionné
-              FutureBuilder<String?>(
-                future: CircuitService.getCircuitName(selectedCircuitId),
-                builder: (context, circuitSnapshot) {
-                  if (circuitSnapshot.hasData && circuitSnapshot.data != null) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        border: Border.all(color: Colors.blue.shade200),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${circuitSnapshot.data}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue.shade700,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                // Message d'erreur
+                _buildErrorMessage(),
 
-              // Message d'erreur
-              _buildErrorMessage(),
+                // Contrôles de timing avec nom du circuit intégré
+                _buildTimingControls(selectedCircuitId),
 
-              // Contrôles de timing
-              _buildTimingControls(selectedCircuitId),
-
-              // Données de timing en temps réel
-              Expanded(child: SingleChildScrollView(child: _buildTimingData())),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Widget de bouton de contrôle racing pour live timing
-class _RacingControlButton extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool isEnabled;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _RacingControlButton({
-    required this.icon,
-    required this.label,
-    required this.isEnabled,
-    required this.color,
-    required this.onPressed,
-  });
-
-  @override
-  State<_RacingControlButton> createState() => _RacingControlButtonState();
-}
-
-class _RacingControlButtonState extends State<_RacingControlButton>
-    with SingleTickerProviderStateMixin {
-  bool _isPressed = false;
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 100),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: widget.isEnabled
-          ? (_) {
-              setState(() => _isPressed = true);
-              _animationController.forward();
-            }
-          : null,
-      onTapUp: widget.isEnabled
-          ? (_) {
-              setState(() => _isPressed = false);
-              _animationController.reverse();
-              widget.onPressed();
-            }
-          : null,
-      onTapCancel: widget.isEnabled
-          ? () {
-              setState(() => _isPressed = false);
-              _animationController.reverse();
-            }
-          : null,
-      child: AnimatedBuilder(
-        animation: _scaleAnimation,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: widget.isEnabled
-                    ? LinearGradient(
-                        colors: [
-                          widget.color,
-                          widget.color.withValues(alpha: 0.8),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      )
-                    : LinearGradient(
-                        colors: [Colors.grey.shade600, Colors.grey.shade700],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  width: 1,
+                // Tableau de timing principal
+                LiveTimingTable(
+                  driversData: _driversData,
+                  isConnected: _wsService.isConnected,
                 ),
-                boxShadow: widget.isEnabled && _isPressed
-                    ? []
-                    : [
-                        BoxShadow(
-                          color: widget.color.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-              ),
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(widget.icon, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
+
+                // Sections de debug pliables
+                DebugSections(
+                  lastTimingData: _lastTimingData,
+                  lastRawMessage: _lastRawMessage,
                 ),
-              ),
+
+                // Espace en bas pour le scrolls
+                const SizedBox(height: 20),
+              ],
             ),
           );
         },

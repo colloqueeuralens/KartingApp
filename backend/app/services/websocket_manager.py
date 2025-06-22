@@ -212,13 +212,7 @@ class ConnectionManager:
             logger.info(f"📊 COMPLETE MESSAGE TO SEND: {message}")
             
             await self._broadcast_message_to_circuit(circuit_id, message)
-            
-            # NOUVEAU: Log détaillé de l'état complet de tous les karts après traitement
-            print(f"")
-            print(f"🏁 ====== BACKEND - ÉTAT COMPLET APRÈS TRAITEMENT MESSAGE ======")
-            print(f"📊 Circuit: {circuit_id}")
-            print(f"📊 Total karts traités dans ce message: {len(simple_drivers)}")
-            print(f"")
+        
             
             # Trier les karts par ID pour un affichage ordonné
             sorted_drivers = sorted(simple_drivers.items(), key=lambda x: x[0])

@@ -9,6 +9,7 @@ class RacingTheme {
   static const Color racingGreen = Color(0xFF228B22);
   static const Color racingYellow = Color(0xFFFFD700);
   static const Color racingBlue = Color(0xFF4169E1);
+  static const Color racingGold = Color(0xFFDAA520);
 
   // Couleurs de performance
   static const Color excellent = Color(0xFF00C851);

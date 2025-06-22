@@ -191,6 +191,10 @@ class LiveTimingWebSocketService {
   final Map<String, Map<String, dynamic>> _kartDataCache = {};
   int _messageCounter = 0;
 
+  /// Expose proprement le cache de tous les karts
+  Map<String, Map<String, dynamic>> get allKartsData =>
+      Map<String, Map<String, dynamic>>.from(_kartDataCache);
+
   /// Stream des données de timing en temps réel
   Stream<Map<String, dynamic>>? get stream => _controller?.stream;
 

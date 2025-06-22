@@ -99,7 +99,7 @@ class OptimalMomentIndicator extends StatelessWidget {
                                             'KMRS RACING DASHBOARD',
                                             style: TextStyle(
                                               color: Colors.white,
-                                              fontSize: 13,
+                                              fontSize: 16,
                                               fontWeight: FontWeight.bold,
                                               letterSpacing: 0.8,
                                             ),
@@ -114,7 +114,7 @@ class OptimalMomentIndicator extends StatelessWidget {
                                                 color: Colors.white.withValues(
                                                   alpha: 0.9,
                                                 ),
-                                                fontSize: 15,
+                                                fontSize: 14,
                                                 fontWeight: FontWeight.w700,
                                                 letterSpacing: 0.6,
                                               ),
@@ -222,7 +222,9 @@ class OptimalMomentIndicator extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
-                                      isOptimal ? Icons.flag : Icons.access_time,
+                                      isOptimal
+                                          ? Icons.flag
+                                          : Icons.access_time,
                                       color: Colors.white,
                                       size: 12,
                                     ),
@@ -293,14 +295,18 @@ class OptimalMomentIndicator extends StatelessWidget {
                                   left: 0,
                                   top: 0,
                                   bottom: 0,
-                                  width: constraints.maxWidth * (percentage / 100).clamp(0.0, 1.0),
+                                  width:
+                                      constraints.maxWidth *
+                                      (percentage / 100).clamp(0.0, 1.0),
                                   child: Container(
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(2),
                                       color: Colors.white,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.white.withValues(alpha: 0.5),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.5,
+                                          ),
                                           blurRadius: 4,
                                         ),
                                       ],

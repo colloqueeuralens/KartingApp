@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/racing_theme.dart';
+import '../../widgets/common/glassmorphism_container.dart';
+import 'dart:math' as math;
 
-/// Écran de connexion / inscription avec thème racing
+/// Écran de connexion avec thème racing et glassmorphism
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,7 +17,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final _emailCtl = TextEditingController();
   final _passCtl = TextEditingController();
-  bool _isRegister = false, _loading = false;
+  bool _loading = false;
 
   late AnimationController _logoController;
   late AnimationController _formController;
@@ -79,17 +81,10 @@ class _LoginScreenState extends State<LoginScreen>
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      if (_isRegister) {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailCtl.text.trim(),
-          password: _passCtl.text,
-        );
-      } else {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailCtl.text.trim(),
-          password: _passCtl.text,
-        );
-      }
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailCtl.text.trim(),
+        password: _passCtl.text,
+      );
       // AuthGate détectera le changement et naviguera automatiquement
     } on FirebaseAuthException catch (e) {
       if (mounted) {
@@ -99,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen>
               children: [
                 const Icon(Icons.error, color: Colors.white),
                 const SizedBox(width: 12),
-                Expanded(child: Text(e.message ?? 'Erreur Firebase')),
+                Expanded(child: Text(e.message ?? 'Erreur de connexion')),
               ],
             ),
             backgroundColor: RacingTheme.bad,
@@ -113,14 +108,46 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildBackground() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.grey.shade100, Colors.grey.shade50, Colors.white],
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _backgroundAnimation,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0A1628), // Bleu marine très foncé
+                const Color(0xFF1E3A8A), // Bleu marine moyen
+                const Color(0xFF1E40AF), // Bleu légèrement plus clair
+              ],
+              stops: [0.0, 0.6, 1.0],
+            ),
+          ),
+          child: Stack(
+            children: [
+              // Effet de texture satiné subtile
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.1,
+                  child: CustomPaint(
+                    painter: SilkTexturePainter(_backgroundAnimation.value),
+                  ),
+                ),
+              ),
+              // Effet de vagues subtiles
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.05,
+                  child: CustomPaint(
+                    painter: WavesPainter(_backgroundAnimation.value),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -166,27 +193,21 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildTitle() {
-    return Column(
-      children: [
-        Text(
-          'KMRS Racing',
-          style: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey.shade800,
-            letterSpacing: 1,
+    return Text(
+      'KMRS Analyzer',
+      style: TextStyle(
+        fontSize: 36,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        letterSpacing: 2,
+        shadows: [
+          Shadow(
+            offset: const Offset(0, 2),
+            blurRadius: 4,
+            color: Colors.black.withValues(alpha: 0.3),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Kart Management & Racing System',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.grey.shade600,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -202,140 +223,221 @@ class _LoginScreenState extends State<LoginScreen>
               width: double.infinity,
               constraints: const BoxConstraints(maxWidth: 400),
               margin: const EdgeInsets.all(24),
-              child: Card(
-                elevation: 12,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              child: GlassmorphismContainer(
+                blur: 20,
+                opacity: 0.15,
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 1,
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white,
-                        Colors.white.withValues(alpha: 0.95),
-                      ],
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(32),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _isRegister ? 'Créer un compte' : 'Connexion',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: RacingTheme.racingBlack,
+                padding: const EdgeInsets.all(32),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Email Field
+                      TextFormField(
+                        controller: _emailCtl,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Adresse email',
+                          labelStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
                           ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Email Field
-                        TextFormField(
-                          controller: _emailCtl,
-                          decoration: const InputDecoration(
-                            labelText: 'Adresse email',
-                            prefixIcon: Icon(Icons.email_outlined),
-                            hintText: 'exemple@email.com',
+                          prefixIcon: Icon(
+                            Icons.email_outlined,
+                            color: Colors.white.withValues(alpha: 0.8),
                           ),
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (v) => v != null && v.contains('@')
-                              ? null
-                              : 'Email invalide',
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Password Field
-                        TextFormField(
-                          controller: _passCtl,
-                          decoration: const InputDecoration(
-                            labelText: 'Mot de passe',
-                            prefixIcon: Icon(Icons.lock_outline),
-                            hintText: 'Minimum 6 caractères',
+                          hintText: 'exemple@email.com',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
                           ),
-                          obscureText: true,
-                          validator: (v) => v != null && v.length >= 6
-                              ? null
-                              : '6 caractères minimum',
-                        ),
-
-                        const SizedBox(height: 32),
-
-                        // Submit Button
-                        if (_loading)
-                          Container(
-                            width: double.infinity,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              color: RacingTheme.racingGreen,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.3),
                             ),
-                            child: const Center(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Colors.white,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: RacingTheme.bad,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: RacingTheme.bad,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.1),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) => v != null && v.contains('@')
+                            ? null
+                            : 'Email invalide',
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Password Field
+                      TextFormField(
+                        controller: _passCtl,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Mot de passe',
+                          labelStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.lock_outline,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                          hintText: 'Minimum 6 caractères',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Colors.white,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: RacingTheme.bad,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: RacingTheme.bad,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.1),
+                        ),
+                        obscureText: true,
+                        validator: (v) => v != null && v.length >= 6
+                            ? null
+                            : '6 caractères minimum',
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Submit Button
+                      if (_loading)
+                        Container(
+                          width: double.infinity,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: LinearGradient(
+                              colors: [
+                                RacingTheme.racingGreen.withValues(alpha: 0.8),
+                                RacingTheme.racingGreen,
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: RacingTheme.racingGreen.withValues(
+                                  alpha: 0.3,
+                                ),
+                                blurRadius: 8,
+                                spreadRadius: 0,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
                                     ),
                                   ),
-                                  SizedBox(width: 12),
-                                  Text(
-                                    'Connexion...',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Connexion...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
                                   ),
-                                ],
-                              ),
-                            ),
-                          )
-                        else
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton.icon(
-                              onPressed: _submit,
-                              icon: Icon(
-                                _isRegister ? Icons.person_add : Icons.login,
-                              ),
-                              label: Text(
-                                _isRegister ? 'S\'inscrire' : 'Se connecter',
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                textStyle: const TextStyle(fontSize: 18),
-                              ),
+                                ),
+                              ],
                             ),
                           ),
-
-                        const SizedBox(height: 24),
-
-                        // Toggle Button
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => _isRegister = !_isRegister),
-                          child: Text(
-                            _isRegister
-                                ? 'J\'ai déjà un compte'
-                                : 'Pas encore inscrit ?',
-                            style: const TextStyle(fontSize: 16),
+                        )
+                      else
+                        SizedBox(
+                          width: double.infinity,
+                          height: 40,
+                          child: ElevatedButton.icon(
+                            onPressed: _submit,
+                            icon: const Icon(Icons.login, color: Colors.white),
+                            label: const Text(
+                              'Sign In',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            style:
+                                ElevatedButton.styleFrom(
+                                  backgroundColor: RacingTheme.racingGreen,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  shadowColor: RacingTheme.racingGreen
+                                      .withValues(alpha: 0.3),
+                                ).copyWith(
+                                  elevation:
+                                      WidgetStateProperty.resolveWith<double>((
+                                        Set<WidgetState> states,
+                                      ) {
+                                        if (states.contains(
+                                          WidgetState.pressed,
+                                        ))
+                                          return 2;
+                                        return 8;
+                                      }),
+                                ),
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -388,41 +490,94 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-/// Custom painter for checkered flag pattern
-class CheckeredFlagPainter extends CustomPainter {
+/// Custom painter pour effet de texture satiné
+class SilkTexturePainter extends CustomPainter {
   final double animation;
 
-  CheckeredFlagPainter(this.animation);
+  SilkTexturePainter(this.animation);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-    const squareSize = 20.0;
-    final offset = animation * squareSize;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
 
-    for (
-      double x = -squareSize + offset;
-      x < size.width + squareSize;
-      x += squareSize * 2
-    ) {
-      for (
-        double y = -squareSize;
-        y < size.height + squareSize;
-        y += squareSize * 2
-      ) {
-        // White squares
-        paint.color = Colors.white.withValues(alpha: 0.05);
-        canvas.drawRect(Rect.fromLTWH(x, y, squareSize, squareSize), paint);
-        canvas.drawRect(
-          Rect.fromLTWH(x + squareSize, y + squareSize, squareSize, squareSize),
-          paint,
-        );
-      }
+    // Lignes diagonales pour effet satiné
+    for (double i = -size.width; i < size.width + size.height; i += 8) {
+      final offset = (animation * 20) % 16;
+      paint.color = Colors.white.withValues(alpha: 0.02);
+      canvas.drawLine(
+        Offset(i + offset, 0),
+        Offset(i + size.height + offset, size.height),
+        paint,
+      );
+    }
+
+    // Lignes croisées pour plus de profondeur
+    for (double i = 0; i < size.height + size.width; i += 12) {
+      final offset = (animation * -15) % 18;
+      paint.color = Colors.white.withValues(alpha: 0.01);
+      canvas.drawLine(
+        Offset(0, i + offset),
+        Offset(size.width, i - size.width + offset),
+        paint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(CheckeredFlagPainter oldDelegate) {
+  bool shouldRepaint(SilkTexturePainter oldDelegate) {
+    return oldDelegate.animation != animation;
+  }
+}
+
+/// Custom painter pour effet de vagues subtiles
+class WavesPainter extends CustomPainter {
+  final double animation;
+
+  WavesPainter(this.animation);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    final path = Path();
+
+    // Première vague
+    paint.color = Colors.white.withValues(alpha: 0.03);
+    path.reset();
+    for (double x = 0; x <= size.width; x += 1) {
+      final y =
+          size.height * 0.3 +
+          30 * math.sin((x / 80) + (animation * 2 * math.pi));
+      if (x == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, paint);
+
+    // Deuxième vague
+    paint.color = Colors.white.withValues(alpha: 0.02);
+    path.reset();
+    for (double x = 0; x <= size.width; x += 1) {
+      final y =
+          size.height * 0.7 +
+          20 * math.sin((x / 60) - (animation * 1.5 * math.pi));
+      if (x == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(WavesPainter oldDelegate) {
     return oldDelegate.animation != animation;
   }
 }

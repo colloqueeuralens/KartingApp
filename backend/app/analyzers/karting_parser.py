@@ -15,7 +15,7 @@ COLUMN_TRANSLATIONS = {
     # Classement/Position
     "Clt": "Classement", "Pos": "Classement", "Position": "Classement", 
     "Rk": "Classement", "Rang": "Classement", "Rank": "Classement",
-    "Classement": "Classement",
+    "Classement": "Classement","Pos.": "Classement",
     
     # Pilote/Driver  
     "Pilote": "Pilote", "Driver": "Pilote", "Fahrer": "Pilote", 
