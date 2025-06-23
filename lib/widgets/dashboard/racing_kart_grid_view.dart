@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rxdart/rxdart.dart';
+import 'dart:async';
 import '../../services/session_service.dart';
+import '../../services/optimistic_state_service.dart';
 import '../../theme/racing_theme.dart';
 import 'racing_kart_card.dart';
 import 'empty_kart_slot.dart';
@@ -49,16 +52,47 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
   int _lastValidPercentage = 0;
   bool _lastValidIsOptimal = false;
   int _lastKartCount = 0;
+  
+  // Cache pour éviter les callbacks inutiles
+  int? _lastCachedPct;
+  bool? _lastCachedIsOpt;
+  int? _lastCachedThreshold;
+  
+  // Debouncing pour drag & drop
+  Timer? _dragDebounceTimer;
+  
+  // Cache pour optimiser la détection des doublons
+  String? _lastKartSignature;
+  bool _hasDuplicatesCache = false;
+  
+  // Service d'état optimiste pour UI instantanée
+  final OptimisticStateService _optimisticService = OptimisticStateService();
 
   @override
   void initState() {
     super.initState();
+    // Écouter les changements d'état optimiste pour rebuild automatique
+    _optimisticService.addListener(_onOptimisticStateChanged);
+  }
+
+  void _onOptimisticStateChanged() {
+    if (mounted) {
+      // 🚀 OPTIMISATION: Rebuild seulement si pas déjà en cours de mouvement
+      if (!_isMovingKart) {
+        setState(() {
+          // Rebuild automatique quand l'état optimiste change
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     // Clear hovered columns to avoid mouse tracking issues
     _hoveredColumns.clear();
+    _dragDebounceTimer?.cancel();
+    // Arrêter l'écoute de l'état optimiste
+    _optimisticService.removeListener(_onOptimisticStateChanged);
     super.dispose();
   }
 
@@ -132,11 +166,38 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
     if (widget.readOnly) return;
     if (kartData.fromColumn == toColumn) return;
 
+    // 🎯 FEEDBACK HAPTIC INSTANTANÉ pour sensation premium
+    HapticFeedback.lightImpact();
+
+    // 🚀 MOUVEMENT OPTIMISTE INSTANTANÉ - UI update ATOMIQUE
     setState(() {
       _isMovingKart = true;
+      // Appliquer le mouvement optimiste pendant le setState pour éviter la duplication
+      _optimisticService.moveKartOptimistically(
+        docId: kartData.docId,
+        fromColumn: kartData.fromColumn,
+        toColumn: toColumn,
+        number: kartData.number,
+        perf: kartData.perf,
+      );
     });
 
+    // Annuler tout mouvement Firebase en cours
+    _dragDebounceTimer?.cancel();
+
+    // Debouncing ultra-optimisé pour Firebase en arrière-plan
+    _dragDebounceTimer = Timer(const Duration(milliseconds: 20), () async {
+      await _actuallyMoveKart(context, kartData, toColumn);
+    });
+  }
+
+  Future<void> _actuallyMoveKart(
+    BuildContext context,
+    KartData kartData,
+    int toColumn,
+  ) async {
     try {
+      // Firebase transaction en arrière-plan
       await SessionService.moveKart(
         kartData.fromColumn,
         toColumn,
@@ -144,6 +205,10 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
         kartData.number,
         kartData.perf,
       );
+      
+      // ✅ Confirmer le mouvement optimiste (Firebase réussi)
+      _optimisticService.confirmMove(kartData.docId);
+      
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -151,20 +216,27 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
               'Kart ${kartData.number} déplacé vers la colonne ${toColumn + 1}',
             ),
             backgroundColor: Colors.green,
+            duration: const Duration(milliseconds: 1500),
           ),
         );
       }
     } catch (e) {
+      // ❌ Rollback du mouvement optimiste (Firebase échoué)
+      _optimisticService.rollbackMove(kartData.docId);
+      
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur lors du déplacement: $e'),
             backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Réessayer',
+              onPressed: () => _actuallyMoveKart(context, kartData, toColumn),
+            ),
           ),
         );
       }
     } finally {
-      await Future.delayed(const Duration(milliseconds: 100));
       if (mounted) {
         setState(() {
           _isMovingKart = false;
@@ -374,10 +446,14 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
         }
 
         final colsData = snapCols.data!.map((s) => s.docs).toList();
+        
+        // 🚀 OPTIMISATION UI INSTANTANÉE : Appliquer les positions optimistes
+        final adjustedColsData = _buildOptimisticColumnsData(colsData);
+        
         final allKarts = <Map<String, dynamic>>[];
         final kartNumbers = <int>[];
 
-        for (var docs in colsData) {
+        for (var docs in adjustedColsData) {
           for (var d in docs) {
             final data = d.data();
             allKarts.add(data);
@@ -389,8 +465,8 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
 
         // Calculer les bonnes performances
         int good = 0;
-        for (int colIndex = 0; colIndex < colsData.length; colIndex++) {
-          final docs = colsData[colIndex];
+        for (int colIndex = 0; colIndex < adjustedColsData.length; colIndex++) {
+          final docs = adjustedColsData[colIndex];
           if (docs.isNotEmpty) {
             final firstKart = docs.first.data();
             final p = firstKart['perf'] as String;
@@ -414,8 +490,8 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
             ? 75
             : 100;
 
-        // Détection d'état transitoire pour éviter les affichages incorrects pendant drag & drop
-        final hasTemporaryDuplicates = kartNumbers.toSet().length != kartNumbers.length;
+        // Détection d'état transitoire optimisée avec cache
+        final hasTemporaryDuplicates = _updateDuplicateDetection(kartNumbers);
         final isTransitionalState = _isMovingKart || hasTemporaryDuplicates;
 
         final int pct;
@@ -436,16 +512,22 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
           _lastKartCount = currentKartCount;
         }
 
-        // Notifier le parent des changements de performance
+        // Notifier le parent des changements de performance (avec cache)
         if (widget.onPerformanceUpdate != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            widget.onPerformanceUpdate!(isOpt, pct, threshold);
-          });
+          // Ne déclencher le callback que si les valeurs ont vraiment changé
+          if (pct != _lastCachedPct || isOpt != _lastCachedIsOpt || threshold != _lastCachedThreshold) {
+            _lastCachedPct = pct;
+            _lastCachedIsOpt = isOpt;
+            _lastCachedThreshold = threshold;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              widget.onPerformanceUpdate!(isOpt, pct, threshold);
+            });
+          }
         }
 
         return Row(
                 children: List.generate(widget.numColumns, (col) {
-                  final docs = colsData[col];
+                  final docs = adjustedColsData[col];
                   final isHovered = _hoveredColumns.contains(col);
 
                   return Expanded(
@@ -557,11 +639,27 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                                           (perf == '++' || perf == '+');
                                       final showPulse =
                                           isKartOptimal && isOpt && pct < 100;
+                                      
+                                      // 🚀 Vérifier si ce kart est en mouvement optimiste
+                                      final isPendingOptimistic = _optimisticService.isPendingMove(doc.id);
 
                                       final kartCard = Container(
                                         margin: const EdgeInsets.symmetric(
                                           vertical: 4,
                                         ),
+                                        // 🚀 Indicateur visuel pour mouvement optimiste en cours
+                                        decoration: isPendingOptimistic
+                                            ? BoxDecoration(
+                                                borderRadius: BorderRadius.circular(16),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.blue.withValues(alpha: 0.5),
+                                                    blurRadius: 8,
+                                                    spreadRadius: 2,
+                                                  ),
+                                                ],
+                                              )
+                                            : null,
                                         child: RacingKartCard(
                                           kartNumber: number.toString(),
                                           performance: perf,
@@ -670,4 +768,198 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
     );
   }
 
+  /// Optimise la détection des doublons avec cache pour éviter les recalculs
+  bool _updateDuplicateDetection(List<int> kartNumbers) {
+    final currentSignature = kartNumbers.join(',');
+    if (_lastKartSignature != currentSignature) {
+      _lastKartSignature = currentSignature;
+      _hasDuplicatesCache = kartNumbers.toSet().length != kartNumbers.length;
+    }
+    return _hasDuplicatesCache;
+  }
+
+  /// 🚀 CORE OPTIMISATION : Construit les données de colonnes avec positions optimistes (ATOMIQUE)
+  List<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _buildOptimisticColumnsData(
+    List<List<QueryDocumentSnapshot<Map<String, dynamic>>>> originalColsData,
+  ) {
+    // 🚀 APPROCHE ATOMIQUE : Créer une map globale de tous les karts d'abord
+    final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> allKartsById = {};
+    final Map<String, int> originalKartColumns = {};
+
+    // Phase 1: Indexer tous les karts existants
+    for (int col = 0; col < originalColsData.length; col++) {
+      for (final doc in originalColsData[col]) {
+        allKartsById[doc.id] = doc;
+        originalKartColumns[doc.id] = col;
+      }
+    }
+
+    // Phase 2: Créer les colonnes finales avec positions optimistes
+    final adjustedData = List.generate(
+      widget.numColumns,
+      (col) => <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+    );
+
+    // Phase 3: Placer chaque kart dans sa position finale (optimiste ou originale)
+    for (final entry in allKartsById.entries) {
+      final docId = entry.key;
+      final doc = entry.value;
+      final originalCol = originalKartColumns[docId]!;
+      
+      // Vérifier s'il y a une position optimiste pour ce kart
+      final optimisticPos = _optimisticService.getOptimisticPosition(docId);
+      
+      if (optimisticPos != null) {
+        // 🚀 Kart en mouvement optimiste : placer UNIQUEMENT dans la nouvelle colonne
+        final targetCol = optimisticPos.column;
+        final modifiedDoc = _createOptimisticDocument(doc, optimisticPos);
+        
+        print('🔄 OPTIMISTIC MOVE: Kart ${doc.data()['number']} ${originalCol + 1}→${targetCol + 1} (UNIQUE)');
+        
+        // Insérer en première position (plus récent)
+        adjustedData[targetCol].insert(0, modifiedDoc);
+        
+        // ⚠️ CRITIQUE: Continue pour éviter double placement dans position originale
+        continue;
+      }
+      
+      // 📍 Kart normal : conserver position originale (seulement si pas optimiste)
+      adjustedData[originalCol].add(doc);
+    }
+
+    // 🚀 DÉDUPLICATION PAR NUMÉRO : Éliminer les doublons dans chaque colonne
+    for (int col = 0; col < adjustedData.length; col++) {
+      if (adjustedData[col].length <= 1) continue; // Pas de doublons possibles
+      
+      final Map<int, List<QueryDocumentSnapshot<Map<String, dynamic>>>> kartsByNumber = {};
+      
+      // Grouper les karts par numéro dans cette colonne
+      for (final doc in adjustedData[col]) {
+        final kartNumber = doc.data()['number'] as int;
+        kartsByNumber.putIfAbsent(kartNumber, () => []).add(doc);
+      }
+      
+      // Reconstruire la colonne en éliminant les doublons
+      adjustedData[col].clear();
+      
+      for (final entry in kartsByNumber.entries) {
+        final kartNumber = entry.key;
+        final duplicates = entry.value;
+        
+        if (duplicates.length == 1) {
+          // Pas de doublon, garder tel quel
+          adjustedData[col].add(duplicates.first);
+        } else {
+          // 🚨 DOUBLON DÉTECTÉ : Prioriser le kart optimiste
+          QueryDocumentSnapshot<Map<String, dynamic>>? optimisticKart;
+          QueryDocumentSnapshot<Map<String, dynamic>>? firebaseKart;
+          
+          for (final doc in duplicates) {
+            final isOptimistic = doc.data().containsKey('_isOptimistic');
+            if (isOptimistic) {
+              optimisticKart = doc;
+              print('🎯 DOUBLON: Kart $kartNumber - Priorisant version optimiste');
+            } else {
+              firebaseKart = doc;
+              print('🔄 DOUBLON: Kart $kartNumber - Ignorant version Firebase');
+            }
+          }
+          
+          // Garder l'optimiste en priorité, sinon Firebase
+          final kartToKeep = optimisticKart ?? firebaseKart!;
+          adjustedData[col].add(kartToKeep);
+        }
+      }
+      
+      // Retrier par timestamp pour maintenir l'ordre
+      adjustedData[col].sort((a, b) {
+        final aTime = a.data()['timestamp'] as Timestamp?;
+        final bTime = b.data()['timestamp'] as Timestamp?;
+        if (aTime == null || bTime == null) return 0;
+        return bTime.compareTo(aTime); // DESC order (plus récent en premier)
+      });
+    }
+
+    // 🐛 DEBUG: Vérifier qu'il n'y a plus de duplication (APRÈS NETTOYAGE)
+    final Set<String> seenKartIds = {};
+    final Set<int> seenKartNumbers = {};
+    int totalKarts = 0;
+    bool hasDuplicateNumbers = false;
+    
+    for (int col = 0; col < adjustedData.length; col++) {
+      print('📍 Colonne ${col + 1}: ${adjustedData[col].length} karts');
+      for (final doc in adjustedData[col]) {
+        final kartNum = doc.data()['number'] as int;
+        totalKarts++;
+        
+        if (seenKartNumbers.contains(kartNum)) {
+          print('🚨 NUMÉRO DUPLIQUÉ: Kart $kartNum apparaît multiple fois!');
+          hasDuplicateNumbers = true;
+        }
+        seenKartNumbers.add(kartNum);
+        seenKartIds.add(doc.id);
+        print('  ✅ Kart $kartNum unique en col ${col + 1}');
+      }
+    }
+    print('📊 DEDUP FINAL: ${seenKartNumbers.length} numéros uniques / $totalKarts total = ${!hasDuplicateNumbers ? "SUCCESS" : "FAIL"}');
+    
+    return adjustedData;
+  }
+
+  /// Crée un document avec données optimistes pour affichage instantané
+  QueryDocumentSnapshot<Map<String, dynamic>> _createOptimisticDocument(
+    QueryDocumentSnapshot<Map<String, dynamic>> originalDoc,
+    OptimisticKartPosition optimisticPos,
+  ) {
+    // Créer un wrapper de document qui utilise les données optimistes
+    return _OptimisticDocumentSnapshot(
+      originalDoc: originalDoc,
+      optimisticPosition: optimisticPos,
+      // 🚀 Timestamp optimiste factice pour maintenir l'ordre cohérent
+      optimisticTimestamp: DateTime.now(),
+    );
+  }
+}
+
+/// Wrapper de document optimiste pour affichage UI instantané
+class _OptimisticDocumentSnapshot implements QueryDocumentSnapshot<Map<String, dynamic>> {
+  final QueryDocumentSnapshot<Map<String, dynamic>> originalDoc;
+  final OptimisticKartPosition optimisticPosition;
+  final DateTime optimisticTimestamp;
+
+  _OptimisticDocumentSnapshot({
+    required this.originalDoc,
+    required this.optimisticPosition,
+    required this.optimisticTimestamp,
+  });
+
+  @override
+  String get id => originalDoc.id;
+
+  @override
+  Map<String, dynamic> data() {
+    // Retourner les données originales avec timestamp optimiste pour tri cohérent
+    final originalData = originalDoc.data();
+    return {
+      ...originalData,
+      // 🚀 Override timestamp pour maintenir ordre cohérent (plus récent = en haut)
+      'timestamp': Timestamp.fromDate(optimisticTimestamp),
+      '_isOptimistic': true, // Marqueur pour debug
+    };
+  }
+
+  @override
+  DocumentReference<Map<String, dynamic>> get reference => originalDoc.reference;
+
+  @override
+  bool get exists => originalDoc.exists;
+
+  @override
+  SnapshotMetadata get metadata => originalDoc.metadata;
+
+  @override
+  Object? operator [](Object field) => originalDoc[field];
+
+  @override
+  Object? get(Object field) => originalDoc.get(field);
 }
