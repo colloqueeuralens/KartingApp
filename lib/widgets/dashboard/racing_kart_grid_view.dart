@@ -77,12 +77,15 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
 
   void _onOptimisticStateChanged() {
     if (mounted) {
-      // 🚀 OPTIMISATION: Rebuild seulement si pas déjà en cours de mouvement
-      if (!_isMovingKart) {
-        setState(() {
-          // Rebuild automatique quand l'état optimiste change
-        });
-      }
+      // 🚀 CORRECTION FINALE: Rebuild immédiat mais avec debouncing pour éviter les cycles
+      // Permettre les mises à jour pendant les mouvements sans bloquer la déduplication
+      Future.microtask(() {
+        if (mounted) {
+          setState(() {
+            // Rebuild automatique quand l'état optimiste change
+          });
+        }
+      });
     }
   }
 
@@ -814,8 +817,6 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
         final targetCol = optimisticPos.column;
         final modifiedDoc = _createOptimisticDocument(doc, optimisticPos);
         
-        print('🔄 OPTIMISTIC MOVE: Kart ${doc.data()['number']} ${originalCol + 1}→${targetCol + 1} (UNIQUE)');
-        
         // Insérer en première position (plus récent)
         adjustedData[targetCol].insert(0, modifiedDoc);
         
@@ -823,8 +824,14 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
         continue;
       }
       
-      // 📍 Kart normal : conserver position originale (seulement si pas optimiste)
-      adjustedData[originalCol].add(doc);
+      // 🛡️ PROTECTION CIBLÉE : Masquer seulement les conflits de position
+      final kartNumber = doc.data()['number'] as int;
+      final shouldMask = _optimisticService.shouldMaskFirebaseKart(kartNumber, originalCol);
+      
+      if (shouldMask) {
+      } else {
+        adjustedData[originalCol].add(doc);
+      }
     }
 
     // 🚀 DÉDUPLICATION PAR NUMÉRO : Éliminer les doublons dans chaque colonne
@@ -850,7 +857,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
           // Pas de doublon, garder tel quel
           adjustedData[col].add(duplicates.first);
         } else {
-          // 🚨 DOUBLON DÉTECTÉ : Prioriser le kart optimiste
+          // 🚀 PRÉVENTION DUPLICATION VISUELLE : Priorité ABSOLUE à l'optimiste
           QueryDocumentSnapshot<Map<String, dynamic>>? optimisticKart;
           QueryDocumentSnapshot<Map<String, dynamic>>? firebaseKart;
           
@@ -858,14 +865,12 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
             final isOptimistic = doc.data().containsKey('_isOptimistic');
             if (isOptimistic) {
               optimisticKart = doc;
-              print('🎯 DOUBLON: Kart $kartNumber - Priorisant version optimiste');
             } else {
               firebaseKart = doc;
-              print('🔄 DOUBLON: Kart $kartNumber - Ignorant version Firebase');
             }
           }
           
-          // Garder l'optimiste en priorité, sinon Firebase
+          // 🛡️ GARANTIE ZÉRO DUPLICATION : Si optimiste existe, SEUL lui est affiché
           final kartToKeep = optimisticKart ?? firebaseKart!;
           adjustedData[col].add(kartToKeep);
         }
@@ -880,29 +885,6 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
       });
     }
 
-    // 🐛 DEBUG: Vérifier qu'il n'y a plus de duplication (APRÈS NETTOYAGE)
-    final Set<String> seenKartIds = {};
-    final Set<int> seenKartNumbers = {};
-    int totalKarts = 0;
-    bool hasDuplicateNumbers = false;
-    
-    for (int col = 0; col < adjustedData.length; col++) {
-      print('📍 Colonne ${col + 1}: ${adjustedData[col].length} karts');
-      for (final doc in adjustedData[col]) {
-        final kartNum = doc.data()['number'] as int;
-        totalKarts++;
-        
-        if (seenKartNumbers.contains(kartNum)) {
-          print('🚨 NUMÉRO DUPLIQUÉ: Kart $kartNum apparaît multiple fois!');
-          hasDuplicateNumbers = true;
-        }
-        seenKartNumbers.add(kartNum);
-        seenKartIds.add(doc.id);
-        print('  ✅ Kart $kartNum unique en col ${col + 1}');
-      }
-    }
-    print('📊 DEDUP FINAL: ${seenKartNumbers.length} numéros uniques / $totalKarts total = ${!hasDuplicateNumbers ? "SUCCESS" : "FAIL"}');
-    
     return adjustedData;
   }
 

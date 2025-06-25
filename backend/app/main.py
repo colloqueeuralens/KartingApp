@@ -377,11 +377,13 @@ async def get_connection_logs(circuit_id: str, limit: int = 50) -> List[Dict[str
 # Legacy analysis endpoints removed - now using direct karting parser
 
 
+
+
 # WebSocket endpoint for live timing
 @app.websocket("/circuits/{circuit_id}/live")
 async def websocket_endpoint(websocket: WebSocket, circuit_id: str):
     """WebSocket endpoint for live timing data"""
-    logger.info(f"🔥 WEBSOCKET ENDPOINT HIT 🔥 Circuit: {circuit_id}")
+    logger.info(f"WEBSOCKET ENDPOINT HIT Circuit: {circuit_id}")
     logger.info(f"Connection manager instance: {connection_manager._instance_id}")
     
     try:
@@ -398,20 +400,20 @@ async def websocket_endpoint(websocket: WebSocket, circuit_id: str):
         
         # Debug connection manager state before connecting
         pre_connect_state = connection_manager.debug_connection_state(circuit_id)
-        logger.info(f"🔍 Connection manager state BEFORE connect: {pre_connect_state}")
+        logger.info(f"Connection manager state BEFORE connect: {pre_connect_state}")
         
         # Connect client
         logger.info(f"🔌 About to call connection_manager.connect()")
         await connection_manager.connect(websocket, circuit_id)
-        logger.info(f"✅ connection_manager.connect() completed")
+        logger.info(f"connection_manager.connect() completed")
         
         # Debug connection manager state after connecting
         post_connect_state = connection_manager.debug_connection_state(circuit_id)
-        logger.info(f"🔍 Connection manager state AFTER connect: {post_connect_state}")
+        logger.info(f"Connection manager state AFTER connect: {post_connect_state}")
         
         # Verify we have connections now
         conn_count = connection_manager.get_connection_count(circuit_id)
-        logger.info(f"📊 Connection count for {circuit_id}: {conn_count}")
+        logger.info(f"Connection count for {circuit_id}: {conn_count}")
         
         logger.info(f"WebSocket client connected to circuit {circuit_id}")
         
@@ -444,10 +446,10 @@ async def websocket_endpoint(websocket: WebSocket, circuit_id: str):
                         logger.warning(f"Error parsing message from client: {parse_error}")
                         
                 except WebSocketDisconnect as disconnect_ex:
-                    logger.warning(f"⚠️ WebSocket disconnect received for circuit {circuit_id}: {disconnect_ex}")
+                    logger.warning(f"WebSocket disconnect received for circuit {circuit_id}: {disconnect_ex}")
                     break
                 except Exception as receive_ex:
-                    logger.error(f"❌ Error receiving message for circuit {circuit_id}: {receive_ex}")
+                    logger.error(f"Error receiving message for circuit {circuit_id}: {receive_ex}")
                     break
                     
         except Exception as e:
@@ -471,25 +473,25 @@ async def websocket_endpoint(websocket: WebSocket, circuit_id: str):
 @app.post("/circuits/{circuit_id}/test-broadcast")
 async def test_broadcast(circuit_id: str) -> Dict[str, Any]:
     """Test endpoint to force a broadcast and check connections"""
-    logger.info(f"🧪 TESTING BROADCAST for circuit {circuit_id}")
+    logger.info(f"TESTING BROADCAST for circuit {circuit_id}")
     
     # Check connection state before broadcast
     debug_state_before = connection_manager.debug_connection_state(circuit_id)
-    logger.info(f"🔍 Connection state BEFORE test broadcast: {debug_state_before}")
+    logger.info(f"Connection state BEFORE test broadcast: {debug_state_before}")
     
     # Try to broadcast a test karting message (same format as real data)
     test_karting_message = "r900037777c10|in|0:18"
     
-    logger.info(f"🧪 Testing with karting message: {test_karting_message}")
+    logger.info(f"Testing with karting message: {test_karting_message}")
     
     try:
         # Test karting data processing directly
-        logger.info(f"🧪 Testing karting data processing for circuit {circuit_id}")
+        logger.info(f"Testing karting data processing for circuit {circuit_id}")
         await connection_manager.broadcast_karting_data(circuit_id, test_karting_message)
         
         # Check connection state after broadcast
         debug_state_after = connection_manager.debug_connection_state(circuit_id)
-        logger.info(f"🔍 Connection state AFTER test broadcast: {debug_state_after}")
+        logger.info(f"Connection state AFTER test broadcast: {debug_state_after}")
         
         return {
             "message": "Test broadcast completed",
@@ -513,7 +515,7 @@ async def test_broadcast(circuit_id: str) -> Dict[str, Any]:
 @app.post("/circuits/{circuit_id}/test-composite-message")
 async def test_composite_message(circuit_id: str) -> Dict[str, Any]:
     """Test endpoint to test the new composite message format parsing"""
-    logger.info(f"🧪 TESTING COMPOSITE MESSAGE for circuit {circuit_id}")
+    logger.info(f"TESTING COMPOSITE MESSAGE for circuit {circuit_id}")
     
     # Simulate the composite message format you provided
     test_composite_message = """init|r|
@@ -527,11 +529,11 @@ track||Kartcentrum Lelystad (735m)
 grid||<tbody><tr data-id="r0" class="head" data-pos="0"><td data-id="c1" data-type="grp" data-pr="6"></td><td data-id="c2" data-type="sta" data-pr="1"></td><td data-id="c3" data-type="rk" data-pr="1">Pos.</td><td data-id="c4" data-type="no" data-pr="1">Kart</td><td data-id="c5" data-type="dr" data-pr="1">Team</td></tr><tr data-id="r900038041" data-pos="1"><td data-id="r900038041c1" class="gs"></td><td data-id="r900038041c2" class="sr"></td><td class="rk"><div><p data-id="r900038041c3" class="">1</p></div></td><td class="no"><div data-id="r900038041c4" class="no26">27</div></td><td data-id="r900038041c5" class="dr">ACE OF RACE</td></tr><tr data-id="r900038263" data-pos="8"><td data-id="r900038263c1" class="gs"></td><td data-id="r900038263c2" class="so"></td><td class="rk"><div><p data-id="r900038263c3" class="">8</p></div></td><td class="no"><div data-id="r900038263c4" class="no26">12</div></td><td data-id="r900038263c5" class="dr">FAST&CURIOUS</td></tr></tbody>
 msg||test message"""
     
-    logger.info(f"🧪 Testing with composite message containing grid data")
+    logger.info(f"Testing with composite message containing grid data")
     
     try:
         # Test composite message processing directly
-        logger.info(f"🧪 Testing composite message processing for circuit {circuit_id}")
+        logger.info(f"Testing composite message processing for circuit {circuit_id}")
         await connection_manager.broadcast_karting_data(circuit_id, test_composite_message)
         
         return {

@@ -5,11 +5,13 @@ import '../../theme/racing_theme.dart';
 class LiveTimingTable extends StatefulWidget {
   final Map<String, Map<String, dynamic>> driversData;
   final bool isConnected;
+  final List<String> columnOrder; // NOUVEAU: Ordre des colonnes du backend
 
   const LiveTimingTable({
     super.key,
     required this.driversData,
     required this.isConnected,
+    this.columnOrder = const [], // Par défaut: liste vide
   });
 
   @override
@@ -21,7 +23,32 @@ class _LiveTimingTableState extends State<LiveTimingTable>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
-  /// Extraire les headers dynamiquement depuis les données
+  /// Ordre des colonnes fixe et logique pour éviter le mélange aléatoire
+  static const List<String> _fixedColumnOrder = [
+    'Classement',
+    'Kart',
+    'Pilote',
+    'Meilleur T.',
+    'Dernier T.',
+    'Ecart',
+    'Tours',
+    'Position',
+    'Pos.',
+    'Clt',
+    'Numéro',
+    'Nom',
+    'Best Lap',
+    'Last Lap',
+    'Gap',
+    'Laps',
+    'S1',
+    'S2',
+    'S3',
+    'Vitesse',
+    'Speed',
+  ];
+
+  /// Extraire les headers dans l'ordre du backend ou ordre fixe
   List<String> get headers {
     if (widget.driversData.isEmpty) return [];
 
@@ -30,7 +57,42 @@ class _LiveTimingTableState extends State<LiveTimingTable>
     for (final driver in widget.driversData.values) {
       allHeaders.addAll(driver.keys);
     }
-    return allHeaders.toList();
+    
+    // Use backend column order if available
+    if (widget.columnOrder.isNotEmpty) {
+      final orderedHeaders = <String>[];
+      
+      // First add columns in backend order (C1→C2→C3...)
+      for (final column in widget.columnOrder) {
+        if (allHeaders.contains(column)) {
+          orderedHeaders.add(column);
+          allHeaders.remove(column);
+        }
+      }
+      
+      // Then add remaining columns alphabetically
+      final remainingHeaders = allHeaders.toList()..sort();
+      orderedHeaders.addAll(remainingHeaders);
+      
+      return orderedHeaders;
+    }
+    
+    // Fallback: Use fixed order if no backend order
+    final orderedHeaders = <String>[];
+    
+    // First add columns in fixed order
+    for (final column in _fixedColumnOrder) {
+      if (allHeaders.contains(column)) {
+        orderedHeaders.add(column);
+        allHeaders.remove(column);
+      }
+    }
+    
+    // Then add remaining columns alphabetically
+    final remainingHeaders = allHeaders.toList()..sort();
+    orderedHeaders.addAll(remainingHeaders);
+    
+    return orderedHeaders;
   }
 
   /// Filtrer les headers pour ne garder que les colonnes utiles (non vides)
@@ -471,8 +533,13 @@ class _DynamicTimingRowState extends State<_DynamicTimingRow>
   @override
   void didUpdateWidget(_DynamicTimingRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Animer si les données ont changé
-    if (oldWidget.driver.toString() != widget.driver.toString()) {
+    
+    // Obtenir la position pour vérifier si c'est le podium
+    final position = int.tryParse(widget.driver['Classement']?.toString() ?? '999') ?? 999;
+    final isPodium = position >= 1 && position <= 3;
+    
+    // NE PAS animer les 3 premières places pour préserver leur background podium
+    if (!isPodium && oldWidget.driver.toString() != widget.driver.toString()) {
       _highlightController.forward().then((_) {
         _highlightController.reverse();
       });
@@ -498,14 +565,23 @@ class _DynamicTimingRowState extends State<_DynamicTimingRow>
     return AnimatedBuilder(
       animation: _highlightAnimation,
       builder: (context, child) {
-        // Couleur de fond : animation highlight > podium > alternance normale
-        Color? backgroundColor = _highlightAnimation.value;
-        if (backgroundColor == null || backgroundColor == Colors.transparent) {
-          backgroundColor =
-              podiumColor ??
-              (widget.isEven
-                  ? Colors.black.withValues(alpha: 0.2)
-                  : Colors.transparent);
+        // Logique de couleur de fond améliorée
+        Color? backgroundColor;
+        
+        // Vérifier si c'est le podium (1-2-3)
+        final isPodium = position >= 1 && position <= 3;
+        
+        if (isPodium) {
+          // PODIUM: toujours utiliser la couleur podium, jamais d'animation
+          backgroundColor = podiumColor;
+        } else {
+          // AUTRES POSITIONS: animation highlight si active, sinon alternance normale
+          backgroundColor = _highlightAnimation.value;
+          if (backgroundColor == null || backgroundColor == Colors.transparent) {
+            backgroundColor = widget.isEven
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.transparent;
+          }
         }
 
         return Container(

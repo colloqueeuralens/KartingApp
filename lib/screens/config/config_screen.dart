@@ -135,8 +135,6 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   Future<void> _importJsonContent(String jsonContent) async {
     try {
-      print('Début de l\'import JSON...');
-      print('Taille du contenu: ${jsonContent.length} caractères');
 
       setState(() => _loading = true);
 
@@ -144,7 +142,6 @@ class _ConfigScreenState extends State<ConfigScreen>
       final importedCount = result['imported']!;
       final skippedCount = result['skipped']!;
 
-      print('Import terminé avec succès');
 
       if (mounted) {
         String message;
@@ -176,8 +173,6 @@ class _ConfigScreenState extends State<ConfigScreen>
         );
       }
     } catch (e, stackTrace) {
-      print('Erreur lors de l\'import: $e');
-      print('Stack trace: $stackTrace');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

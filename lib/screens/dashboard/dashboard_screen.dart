@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../../widgets/common/app_bar_actions.dart';
 import '../../widgets/dashboard/racing_kart_grid_view.dart';
 import '../../widgets/dashboard/optimal_moment_indicator.dart';
@@ -32,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isOptimal = false;
   int _percentage = 0;
   int _threshold = 100;
+  
 
   static const Map<String, Color> _nameToColor = {
     'Bleu': Colors.blue,

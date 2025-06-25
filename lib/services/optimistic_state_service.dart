@@ -60,6 +60,17 @@ class OptimisticStateService extends ChangeNotifier {
     return _pendingMoves.contains(docId);
   }
 
+  /// Vérifier si un kart numéro a une position optimiste dans une colonne différente
+  bool shouldMaskFirebaseKart(int kartNumber, int currentColumn) {
+    for (final position in _optimisticPositions.values) {
+      if (position.number == kartNumber && position.column != currentColumn) {
+        // Kart optimiste existe dans une AUTRE colonne : masquer ce Firebase
+        return true;
+      }
+    }
+    return false; // Pas de conflit ou même colonne : ne pas masquer
+  }
+
   /// Déplacer un kart de manière optimiste (UI instantanée)
   void moveKartOptimistically({
     required String docId,
@@ -69,8 +80,6 @@ class OptimisticStateService extends ChangeNotifier {
     required String perf,
   }) {
     if (fromColumn == toColumn) return;
-
-    print('🚀 OPTIMISTIC: Kart $number Col${fromColumn + 1} → Col${toColumn + 1} (instantané, position: PREMIÈRE)');
     
     // Créer la position optimiste
     final optimisticPosition = OptimisticKartPosition(
@@ -99,10 +108,10 @@ class OptimisticStateService extends ChangeNotifier {
       _optimisticPositions[docId] = position.copyWith(isPending: false);
       _pendingMoves.remove(docId);
       
-      print('✅ OPTIMISTIC: Kart confirmé pour docId $docId');
       
-      // Nettoyer après un délai pour permettre l'animation
-      Future.delayed(const Duration(milliseconds: 500), () {
+      // 🚀 CORRECTION DUPLICATION VISUELLE: Délai optimisé pour transition fluide
+      // Attendre que Firebase ait propagé les changements avant nettoyage
+      Future.delayed(const Duration(milliseconds: 800), () {
         _optimisticPositions.remove(docId);
         notifyListeners();
       });
@@ -112,7 +121,6 @@ class OptimisticStateService extends ChangeNotifier {
   /// Annuler le mouvement optimiste (en cas d'erreur Firebase)
   void rollbackMove(String docId) {
     if (_optimisticPositions.containsKey(docId)) {
-      print('❌ OPTIMISTIC: Rollback pour docId $docId');
       _optimisticPositions.remove(docId);
       _pendingMoves.remove(docId);
       notifyListeners();
@@ -125,7 +133,6 @@ class OptimisticStateService extends ChangeNotifier {
       if (_optimisticPositions.containsKey(docId)) {
         final position = _optimisticPositions[docId]!;
         if (position.isPending) {
-          print('⚠️ OPTIMISTIC: Timeout cleanup pour docId $docId');
           rollbackMove(docId);
         }
       }
@@ -144,12 +151,6 @@ class OptimisticStateService extends ChangeNotifier {
 
   /// Debug: Afficher l'état actuel
   void debugPrintState() {
-    print('📊 OPTIMISTIC STATE:');
-    print('   - Positions: ${_optimisticPositions.length}');
-    print('   - Pending: ${_pendingMoves.length}');
-    for (final entry in _optimisticPositions.entries) {
-      final pos = entry.value;
-      print('   - ${entry.key}: Col${pos.column + 1} (pending: ${pos.isPending})');
-    }
+    // Debug method - implementation removed for production
   }
 }

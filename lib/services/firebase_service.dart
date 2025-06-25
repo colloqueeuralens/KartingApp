@@ -2,6 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FirebaseService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  
+  /// Initialise Firebase avec optimisations de performance
+  static Future<void> enableOfflinePersistence() async {
+    try {
+      await FirebaseFirestore.instance.enablePersistence(
+        const PersistenceSettings(synchronizeTabs: true)
+      );
+    } catch (e) {
+    }
+  }
 
   static FirebaseFirestore get db => _db;
 

@@ -25,6 +25,8 @@ class ConnectionManager:
         self.connection_circuits: Dict[WebSocket, str] = {}
         # Last data cache for each circuit
         self.last_data_cache: Dict[str, Dict[str, Any]] = {}
+        # Column order cache for each circuit
+        self.column_order_cache: Dict[str, list] = {}
         # Asyncio lock for connection management (FIXED: was threading.RLock)
         self._lock = asyncio.Lock()
         # Instance ID for debugging
@@ -62,10 +64,15 @@ class ConnectionManager:
         # Send cached data if available
         try:
             if circuit_id in self.last_data_cache:
-                await websocket.send_json({
+                cached_message = {
                     "type": "cached_data",
                     "data": self.last_data_cache[circuit_id]
-                })
+                }
+                # Include column order if available
+                if circuit_id in self.column_order_cache:
+                    cached_message["column_order"] = self.column_order_cache[circuit_id]
+                    
+                await websocket.send_json(cached_message)
                 logger.debug(f"[{self._instance_id}] Sent cached data to new client for circuit {circuit_id}")
         except Exception as e:
             logger.error(f"[{self._instance_id}] Error sending cached data to new client: {e}")
@@ -74,9 +81,6 @@ class ConnectionManager:
     
     async def disconnect(self, websocket: WebSocket):
         """Disconnect a client"""
-        # DEBUGGING: Add stack trace to see who calls disconnect
-        logger.warning(f"[{self._instance_id}] DISCONNECT CALLED")
-        logger.debug(f"[{self._instance_id}] DISCONNECT STACK: {traceback.format_stack()[-3:]}")
         
         async with self._lock:  # FIXED: async with for asyncio.Lock
             circuit_id = self.connection_circuits.get(websocket)
@@ -107,18 +111,7 @@ class ConnectionManager:
         SIMPLIFIED: Process raw message directly through karting parser and broadcast
         Direct WebSocket → KartingParser → Clients flow
         """
-        print(f"🎯 DEBUG WEBSOCKET: === DÉBUT BROADCAST_KARTING_DATA ===")
-        print(f"🎯 DEBUG WEBSOCKET: Circuit ID: {circuit_id}")
-        print(f"🎯 DEBUG WEBSOCKET: Type de message: {type(raw_message)}")
-        print(f"🎯 DEBUG WEBSOCKET: Longueur message: {len(raw_message) if raw_message else 0}")
-        print(f"🎯 DEBUG WEBSOCKET: Contient 'grid||': {'grid||' in raw_message if raw_message else False}")
-        print(f"🎯 DEBUG WEBSOCKET: Message (premiers 200 chars): {raw_message[:200] if raw_message else 'None'}...")
         
-        logger.info(f"🎯 WEBSOCKET MANAGER: DIRECT KARTING PROCESSING for circuit {circuit_id}")
-        logger.info(f"🚨 DEBUG VERSION 2.0 - PROCESSING MESSAGE")
-        logger.info(f"🔍 WEBSOCKET MANAGER: Message type: {type(raw_message)}")
-        logger.info(f"🔍 WEBSOCKET MANAGER: Message length: {len(raw_message) if raw_message else 0}")
-        logger.info(f"📝 WEBSOCKET MANAGER: Raw message (first 100 chars): {raw_message[:100]}...")
         
         try:
             # Import karting parser directly
@@ -139,57 +132,38 @@ class ConnectionManager:
             result = parser.parse_message(raw_message)
             
             if not result.get('success'):
-                print(f"❌ DEBUG WEBSOCKET: Parser failed: {result.get('error', 'Unknown error')}")
-                logger.warning(f"❌ Parser failed: {result.get('error', 'Unknown error')}")
+                logger.warning(f"Parser failed: {result.get('error', 'Unknown error')}")
                 
                 # Si l'auto-détection a échoué, sauvegarder des mappings null dans Firebase
-                if 'grid||' in raw_message:  # C'est un message initial d'auto-détection
-                    print(f"🔥 DEBUG WEBSOCKET: Message grid|| détecté, échec auto-détection pour circuit {circuit_id}")
+                if 'grid||' in raw_message:
                     try:
                         from ..services.firebase_sync import firebase_sync
                         from ..analyzers.karting_parser import KartingMessageParser
                         
-                        print(f"🔥 DEBUG WEBSOCKET: Création parser temporaire pour sauvegarde Firebase...")
-                        # Créer temporairement un parser pour accéder à la méthode
                         temp_parser = KartingMessageParser()
                         temp_parser._save_null_mappings_to_firebase(circuit_id)
                         
-                        print(f"⚙️ DEBUG WEBSOCKET: Circuit {circuit_id} marqué comme nécessitant une configuration manuelle")
-                        logger.warning(f"⚙️ Circuit {circuit_id} marqué comme nécessitant une configuration manuelle")
+                        logger.warning(f"Circuit {circuit_id} marked for manual configuration")
                         
                     except Exception as save_error:
-                        print(f"❌ DEBUG WEBSOCKET: Erreur sauvegarde mappings null: {save_error}")
-                        logger.error(f"❌ Erreur sauvegarde mappings null: {save_error}")
-                else:
-                    print(f"🔍 DEBUG WEBSOCKET: Message non-grid, pas de sauvegarde Firebase")
+                        logger.error(f"Error saving null mappings: {save_error}")
                 
                 return
             
-            print(f"✅ DEBUG WEBSOCKET: Parser success: {len(result.get('drivers_updated', []))} drivers updated")
-            logger.info(f"✅ WEBSOCKET MANAGER: Parser success: {len(result.get('drivers_updated', []))} drivers updated")
+            logger.info(f"Parser success: {len(result.get('drivers_updated', []))} drivers updated")
             
             # Si c'est un message grid|| ou init, vérifier si l'auto-détection a fonctionné
             if 'grid||' in raw_message or 'init' in raw_message:
-                print(f"🎯 DEBUG WEBSOCKET: Message initial avec succès pour circuit {circuit_id}")
-                print(f"🎯 DEBUG WEBSOCKET: Mappings du parser après parsing: {parser.circuit_mappings}")
-                
-                # NOUVEAU: Sauvegarder les mappings auto-détectés dans Firebase
                 if parser.circuit_mappings and len(parser.circuit_mappings) >= 3:
-                    print(f"🎉 DEBUG WEBSOCKET: Auto-détection réussie! Sauvegarde des mappings dans Firebase...")
                     try:
                         await parser._save_detected_mappings_to_firebase(circuit_id)
-                        print(f"✅ DEBUG WEBSOCKET: Sauvegarde mappings auto-détectés terminée")
                     except Exception as save_error:
-                        print(f"❌ DEBUG WEBSOCKET: Erreur sauvegarde mappings auto-détectés: {save_error}")
-                        logger.error(f"❌ Erreur sauvegarde mappings auto-détectés: {save_error}")
-                else:
-                    print(f"⚠️ DEBUG WEBSOCKET: Pas assez de mappings détectés pour sauvegarder: {len(parser.circuit_mappings) if parser.circuit_mappings else 0}")
+                        logger.error(f"Error saving auto-detected mappings: {save_error}")
             
             # Create simple JSON message in desired format: {"driver_id": {"field": "value"}}
             simple_drivers = {}
             mapped_data = result.get('mapped_data', {})
             
-            logger.info(f"🔍 DEBUG: mapped_data = {mapped_data}")
             
             for driver_id, driver_data in mapped_data.items():
                 # Clean up driver data to only include field:value pairs
@@ -198,42 +172,37 @@ class ConnectionManager:
                     if not key.endswith('_raw') and key not in ['driver_id', 'timestamp']:
                         simple_driver[key] = value
                 simple_drivers[driver_id] = simple_driver
-                logger.info(f"🔍 DEBUG: driver {driver_id} -> {simple_driver}")
             
-            # Broadcast simple format
+            # Extract column order from parser mappings (C1→C2→C3→C4...)
+            column_order = []
+            if parser.circuit_mappings:
+                # Sort by column ID (C1, C2, C3...) to get the proper order
+                sorted_columns = sorted(parser.circuit_mappings.items(), key=lambda x: int(x[0][1:]) if x[0][1:].isdigit() else 999)
+                column_order = [column_name for column_id, column_name in sorted_columns]
+            
+            # Broadcast simple format with column order
             message = {
                 "type": "karting_data",
                 "circuit_id": circuit_id,
                 "drivers": simple_drivers,
+                "column_order": column_order,
                 "message_count": result.get('message_count', 0),
                 "timestamp": result.get('timestamp')
             }
             
-            logger.info(f"📊 COMPLETE MESSAGE TO SEND: {message}")
+            # Cache column order for new clients
+            if column_order:
+                self.column_order_cache[circuit_id] = column_order
+            
+            # Cache data for new clients
+            self.last_data_cache[circuit_id] = simple_drivers
             
             await self._broadcast_message_to_circuit(circuit_id, message)
-        
             
-            # Trier les karts par ID pour un affichage ordonné
-            sorted_drivers = sorted(simple_drivers.items(), key=lambda x: x[0])
-            
-            for driver_id, driver_data in sorted_drivers:
-                print(f"🏎️  BACKEND KART #{driver_id}:")
-                # Trier les champs par nom pour un affichage cohérent
-                sorted_fields = sorted(driver_data.items(), key=lambda x: x[0])
-                for field_name, field_value in sorted_fields:
-                    print(f"    • {field_name} → {field_value}")
-                print(f"")
-            
-            print(f"🏁 ====== FIN ÉTAT BACKEND ======")
-            print(f"")
-            
-            # Log the actual drivers data that was sent
-            logger.info(f"📊 DRIVERS DATA SENT: {simple_drivers}")
-            logger.info(f"🎯 WEBSOCKET MANAGER: Successfully broadcast {len(simple_drivers)} drivers")
+            logger.info(f"Successfully broadcast {len(simple_drivers)} drivers")
             
         except Exception as e:
-            logger.error(f"❌ Error in direct karting processing: {e}")
+            logger.error(f"Error in direct karting processing: {e}")
             # Send error to clients
             await self.send_error(circuit_id, f"Error processing timing data: {str(e)}")
 
@@ -241,8 +210,8 @@ class ConnectionManager:
         """
         REMOVED: This method is no longer needed - use broadcast_karting_data directly
         """
-        logger.warning(f"⚠️ broadcast_to_circuit called but is deprecated. Use broadcast_karting_data directly.")
-        logger.info(f"🔧 Converting call to broadcast_karting_data for circuit {circuit_id}")
+        logger.warning(f"broadcast_to_circuit called but is deprecated. Use broadcast_karting_data directly.")
+        logger.info(f"Converting call to broadcast_karting_data for circuit {circuit_id}")
         
         # Convert to string and route to direct processor
         if isinstance(data, str):
@@ -283,13 +252,12 @@ class ConnectionManager:
         # Cache the data for new connections
         self.last_data_cache[circuit_id] = message_data
         
-        # Prepare message with metadata
-        message = {
-            "type": message_data.get("type", "timing_data"),
-            "circuit_id": circuit_id,
-            "data": message_data,
-            "timestamp": message_data.get('timestamp')
-        }
+        # Send the original message directly (without transformation)
+        message = message_data
+        
+        # Ensure circuit_id is always present
+        if "circuit_id" not in message:
+            message["circuit_id"] = circuit_id
         
         disconnected = []
         sent_count = 0

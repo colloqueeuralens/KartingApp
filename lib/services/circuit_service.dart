@@ -54,7 +54,6 @@ class CircuitService {
       }
       return null;
     } catch (e) {
-      print('Erreur lors de la récupération du nom du circuit: $e');
       return null;
     }
   }
@@ -126,7 +125,6 @@ class CircuitService {
         if (exists) {
           skippedCount++;
           skippedCircuits.add(circuitName);
-          print('Circuit "$circuitName" ignoré (doublon détecté)');
           continue;
         }
 
@@ -149,18 +147,14 @@ class CircuitService {
         );
 
         importedCount++;
-        print('Circuit "$circuitName" importé avec succès');
       }
 
-      print('Import terminé: $importedCount circuits importés, $skippedCount ignorés');
       
       return {
         'imported': importedCount,
         'skipped': skippedCount,
       };
     } catch (e, stackTrace) {
-      print('Erreur lors de l\'import dans CircuitService: $e');
-      print('Stack trace: $stackTrace');
       rethrow;
     }
   }

@@ -25,7 +25,6 @@ class BackendService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Backend health check failed: $e');
       return false;
     }
   }
@@ -46,7 +45,6 @@ class BackendService {
       }
       return null;
     } catch (e) {
-      print('Error fetching circuits: $e');
       return null;
     }
   }
@@ -66,7 +64,6 @@ class BackendService {
       }
       return null;
     } catch (e) {
-      print('Error fetching circuit $circuitId: $e');
       return null;
     }
   }
@@ -88,7 +85,6 @@ class BackendService {
       }
       return null;
     } catch (e) {
-      print('Error fetching circuit status: $e');
       return null;
     }
   }
@@ -105,7 +101,6 @@ class BackendService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error starting timing: $e');
       return false;
     }
   }
@@ -122,7 +117,6 @@ class BackendService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error stopping timing: $e');
       return false;
     }
   }
@@ -146,7 +140,6 @@ class BackendService {
       }
       return null;
     } catch (e) {
-      print('Error fetching timing data: $e');
       return null;
     }
   }
@@ -168,7 +161,6 @@ class BackendService {
       }
       return null;
     } catch (e) {
-      print('Error fetching statistics: $e');
       return null;
     }
   }
@@ -191,9 +183,15 @@ class LiveTimingWebSocketService {
   final Map<String, Map<String, dynamic>> _kartDataCache = {};
   int _messageCounter = 0;
 
+  // NOUVEAU: Ordre des colonnes reçu du backend (C1→C2→C3...)
+  List<String> _columnOrder = [];
+
   /// Expose proprement le cache de tous les karts
   Map<String, Map<String, dynamic>> get allKartsData =>
       Map<String, Map<String, dynamic>>.from(_kartDataCache);
+
+  /// Expose l'ordre des colonnes reçu du backend
+  List<String> get columnOrder => List<String>.from(_columnOrder);
 
   /// Stream des données de timing en temps réel
   Stream<Map<String, dynamic>>? get stream => _controller?.stream;
@@ -214,7 +212,6 @@ class LiveTimingWebSocketService {
 
     try {
       final wsUrl = '${BackendService._wsBaseUrl}/circuits/$circuitId/live';
-      print('Connecting to WebSocket: $wsUrl');
 
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       _controller = StreamController<Map<String, dynamic>>.broadcast();
@@ -232,10 +229,8 @@ class LiveTimingWebSocketService {
       _startPing();
 
       _isConnected = true;
-      print('WebSocket connected to circuit $circuitId');
       return true;
     } catch (e) {
-      print('Error connecting to WebSocket: $e');
       _handleError(e);
       return false;
     }
@@ -263,7 +258,7 @@ class LiveTimingWebSocketService {
     // NOUVEAU: Vider le cache lors de la déconnexion
     _kartDataCache.clear();
     _messageCounter = 0;
-    print('WebSocket disconnected - Cache des karts vidé');
+    _columnOrder.clear();
   }
 
   /// Gérer les messages reçus
@@ -289,18 +284,32 @@ class LiveTimingWebSocketService {
       }
 
       if (drivers == null) {
-        print(json.encode(parsed));
         return;
       }
 
-      // NOUVEAU: Mettre à jour le cache avec les nouvelles données (FUSION INTELLIGENTE)
+      // Extract column order if available
+      final columnOrder = parsed['column_order'];
+      if (columnOrder != null && columnOrder is List) {
+        final newOrder = List<String>.from(columnOrder);
+        _columnOrder = newOrder;
+      }
+
+      // NOUVEAU: Mettre à jour le cache avec les nouvelles données (FUSION INTELLIGENTE AMÉLIORÉE)
       _messageCounter++;
       drivers.forEach((kartId, stats) {
         if (stats is Map<String, dynamic>) {
-          // Fusion intelligente : conserver les données existantes + mettre à jour les nouvelles
           if (_kartDataCache.containsKey(kartId)) {
-            // Le kart existe déjà : fusionner les nouvelles données avec les existantes
-            _kartDataCache[kartId]!.addAll(Map<String, dynamic>.from(stats));
+            // Le kart existe déjà : fusion intelligente préservant les données importantes
+            final existingData = _kartDataCache[kartId]!;
+            final newData = Map<String, dynamic>.from(stats);
+
+            // Fusionner en préservant les données complètes si les nouvelles sont partielles
+            newData.forEach((key, value) {
+              if (value != null && value.toString().trim().isNotEmpty) {
+                existingData[key] = value;
+              }
+              // Si la nouvelle valeur est vide/null, on garde l'ancienne si elle existe
+            });
           } else {
             // Nouveau kart : créer l'entrée complète
             _kartDataCache[kartId] = Map<String, dynamic>.from(stats);
@@ -309,12 +318,6 @@ class LiveTimingWebSocketService {
       });
 
       // NOUVEAU: Afficher la totalité du cache à chaque message
-      print('');
-      print(
-        '🏁 ====== MESSAGE #$_messageCounter - ÉTAT COMPLET DE TOUS LES KARTS ======',
-      );
-      print('📊 Total karts suivis: ${_kartDataCache.length}');
-      print('');
 
       // Trier les karts par numéro pour un affichage ordonné
       final sortedKarts = _kartDataCache.entries.toList();
@@ -330,23 +333,8 @@ class LiveTimingWebSocketService {
         }
       });
 
-      sortedKarts.forEach((entry) {
-        final kartId = entry.key;
-        final stats = entry.value;
-
-        print('🏎️  KART #$kartId:');
-        stats.forEach((field, value) {
-          print('    • $field → $value');
-        });
-        print('');
-      });
-
-      print('🏁 ====== FIN ÉTAT COMPLET ======');
-      print('');
-
       // Ignorer les pongs
       if (parsed['type'] == 'pong') {
-        print('Received pong from server');
         return;
       }
 
@@ -359,35 +347,29 @@ class LiveTimingWebSocketService {
 
       // Gérer les mises à jour de statut
       if (parsed['type'] == 'status_update') {
-        print('Status update: ${parsed['status']}');
       }
 
       // Gérer les erreurs
       if (parsed['type'] == 'error') {
-        print('Backend error: ${parsed['error']}');
       }
     } catch (e) {
-      print('Error parsing WebSocket message: $e');
     }
   }
 
   /// Gérer les erreurs de connexion
   void _handleError(dynamic error) {
-    print('WebSocket error: $error');
     _isConnected = false;
 
     if (_reconnectAttempts < _maxReconnectAttempts &&
         _currentCircuitId != null) {
       _attemptReconnect();
     } else {
-      print('Max reconnection attempts reached');
       disconnect();
     }
   }
 
   /// Gérer la déconnexion
   void _handleDisconnection() {
-    print('WebSocket disconnected');
     _isConnected = false;
 
     if (_reconnectAttempts < _maxReconnectAttempts &&
@@ -399,7 +381,6 @@ class LiveTimingWebSocketService {
   /// Tenter une reconnexion
   void _attemptReconnect() {
     _reconnectAttempts++;
-    print('Attempting reconnection $_reconnectAttempts/$_maxReconnectAttempts');
 
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(_reconnectDelay, () {
@@ -417,7 +398,6 @@ class LiveTimingWebSocketService {
         try {
           _channel!.sink.add(json.encode({'type': 'ping'}));
         } catch (e) {
-          print('Error sending ping: $e');
         }
       }
     });

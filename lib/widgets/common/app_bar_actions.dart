@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../screens/dashboard/dashboard_screen.dart';
 import '../../screens/live_timing/live_timing_screen.dart';
+import '../../screens/strategy/strategy_screen.dart';
 import '../../navigation/auth_gate.dart';
 import '../../navigation/main_navigator.dart';
 import '../../theme/racing_theme.dart';
@@ -51,6 +52,11 @@ class AppBarActions {
           value: 'live_timing',
           icon: Icons.timer,
           label: 'Live Timing',
+        ),
+        _buildMenuItem(
+          value: 'strategy',
+          icon: Icons.psychology,
+          label: 'Stratégie',
         ),
         _buildMenuItem(
           value: 'config',
@@ -114,6 +120,9 @@ class AppBarActions {
       case 'live_timing':
         _navigateToLiveTiming(context, onBackToConfig);
         break;
+      case 'strategy':
+        _navigateToStrategy(context, onBackToConfig);
+        break;
       case 'config':
         _navigateToConfig(context);
         break;
@@ -159,6 +168,24 @@ class AppBarActions {
     );
   }
 
+  /// Navigation vers Stratégie
+  static void _navigateToStrategy(BuildContext context, VoidCallback? onBackToConfig) {
+    VoidCallback? configCallback = onBackToConfig;
+    if (configCallback == null) {
+      final mainNavigator = context.findAncestorStateOfType<MainNavigatorState>();
+      if (mainNavigator != null) {
+        configCallback = mainNavigator.goToConfig;
+      }
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => StrategyScreen(onBackToConfig: configCallback),
+      ),
+      (route) => route.isFirst,
+    );
+  }
+
   /// Navigation vers Configuration
   static void _navigateToConfig(BuildContext context) {
     final mainNavigator = context.findAncestorStateOfType<MainNavigatorState>();
@@ -192,6 +219,15 @@ class AppBarActions {
         icon: Icons.timer,
         label: 'Live Timing',
         onPressed: () => _navigateToLiveTiming(context, onBackToConfig),
+      ),
+
+      const SizedBox(width: 8),
+
+      // Bouton Stratégie avec design racing
+      _RacingActionButton(
+        icon: Icons.psychology,
+        label: 'Stratégie',
+        onPressed: () => _navigateToStrategy(context, onBackToConfig),
       ),
 
       const SizedBox(width: 8),

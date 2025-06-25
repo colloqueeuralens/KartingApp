@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/common/app_bar_actions.dart';
@@ -23,12 +24,14 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   final LiveTimingWebSocketService _wsService = LiveTimingWebSocketService();
   bool _backendHealthy = false;
   bool _timingActive = false;
+  bool _wsConnected = false;
   Map<String, dynamic>? _lastTimingData;
   Map<String, dynamic>? _circuitStatus;
   String? _errorMessage;
   String? _lastRawMessage;
   Map<String, Map<String, dynamic>> _driversData = {};
   String? _currentCircuitName;
+  int _connectionAttempts = 0;
 
   @override
   void initState() {
@@ -60,41 +63,74 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
       if (!_backendHealthy) return;
     }
 
-    try {
-      // Obtenir le statut du circuit
-      final status = await BackendService.getCircuitStatus(circuitId);
-      if (mounted) {
-        setState(() {
-          _circuitStatus = status;
-          _timingActive = status?['timing_active'] ?? false;
-        });
-      }
+    _connectionAttempts = 0;
+    await _attemptWebSocketConnection(circuitId);
+  }
 
-      // Se connecter au WebSocket
-      final connected = await _wsService.connect(circuitId);
-      if (connected && mounted) {
-        // Écouter les données en temps réel
-        _wsService.stream?.listen((data) {
-          if (mounted) {
-            setState(() {
-              _lastTimingData = data;
-              _errorMessage = null;
-              // Stocker aussi le message brut pour affichage debug
-              _lastRawMessage = data.toString();
-              // CORRECTION : Utiliser le cache accumulé au lieu des données partielles
-              _driversData = _wsService.allKartsData;
-              print(
-                '📊 TABLEAU: Affichage ${_driversData.length} karts (cache accumulé)',
-              );
-            });
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Erreur de connexion: $e';
-        });
+  Future<void> _attemptWebSocketConnection(String circuitId) async {
+    const maxAttempts = 3;
+    
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      _connectionAttempts = attempt;
+      
+      try {
+        // Obtenir le statut du circuit
+        final status = await BackendService.getCircuitStatus(circuitId);
+        if (mounted) {
+          setState(() {
+            _circuitStatus = status;
+          });
+        }
+
+        // Se connecter au WebSocket avec timeout
+        final connected = await _wsService.connect(circuitId).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            return false;
+          },
+        );
+
+        if (connected && mounted) {
+          setState(() {
+            _wsConnected = true;
+            _errorMessage = null;
+          });
+          
+          // Écouter les données en temps réel
+          _wsService.stream?.listen((data) {
+            if (mounted) {
+              // Traitement normal des données
+              setState(() {
+                _lastTimingData = data;
+                _lastRawMessage = data.toString();
+                _driversData = _wsService.allKartsData;
+                _wsConnected = _wsService.isConnected;
+              });
+            }
+          }, onError: (error) {
+            if (mounted) {
+              setState(() {
+                _wsConnected = false;
+                _errorMessage = 'Connexion WebSocket perdue: $error';
+              });
+            }
+          });
+          
+          return; // Succès, sortir de la boucle
+        }
+
+        // Échec de connexion, attendre avant retry
+        if (attempt < maxAttempts) {
+          await Future.delayed(const Duration(seconds: 2));
+        }
+        
+      } catch (e) {
+        if (attempt == maxAttempts && mounted) {
+          setState(() {
+            _wsConnected = false;
+            _errorMessage = 'Impossible de se connecter au WebSocket après $maxAttempts tentatives';
+          });
+        }
       }
     }
   }
@@ -104,49 +140,61 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
       _errorMessage = null;
     });
 
-    // 1. Démarrer le timing backend
-    final timingSuccess = await BackendService.startTiming(circuitId);
-    if (!timingSuccess) {
+    // WebSocket-first approach - Connect to WebSocket first
+    await _connectToTiming(circuitId);
+    
+    if (!_wsConnected) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Impossible de démarrer le timing backend';
+          _errorMessage = 'Impossible de se connecter au WebSocket avant le timing';
+          _timingActive = false;
         });
       }
       return;
     }
 
-    // 2. Mettre à jour l'état timing
+    // Stabilization delay before starting backend
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // Start timing backend
+    final timingSuccess = await BackendService.startTiming(circuitId);
+    if (!timingSuccess) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Impossible de démarrer le timing backend';
+          _timingActive = false;
+        });
+      }
+      return;
+    }
+
+    // Mark timing as active
     if (mounted) {
       setState(() {
         _timingActive = true;
         _errorMessage = null;
       });
     }
-
-    // 3. Se connecter au WebSocket (sans bloquer l'état timing)
-    try {
-      await _connectToTiming(circuitId);
-    } catch (e) {
-      // Timing reste actif même si WebSocket échoue
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Timing démarré mais connexion WebSocket échouée';
-        });
-      }
-    }
   }
 
   Future<void> _stopTiming(String circuitId) async {
+    // Stop timing backend
     final success = await BackendService.stopTiming(circuitId);
+    
+    // Disconnect WebSocket
+    await _wsService.disconnect();
+    
     if (success && mounted) {
       setState(() {
         _timingActive = false;
+        _wsConnected = false;
         _lastTimingData = null;
+        _driversData.clear();
         _errorMessage = null;
       });
     } else if (mounted) {
       setState(() {
-        _errorMessage = 'Impossible d\'arrêter le timing';
+        _errorMessage = 'Impossible d\'arrêter le timing backend';
       });
     }
   }
@@ -297,7 +345,7 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
         ),
         const SizedBox(width: 8),
         _buildStatusLED(
-          isActive: _wsService.isConnected,
+          isActive: _wsConnected && _wsService.isConnected,
           label: 'WS',
           activeColor: RacingTheme.racingBlue,
         ),
@@ -526,7 +574,8 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
                 // Tableau de timing principal
                 LiveTimingTable(
                   driversData: _driversData,
-                  isConnected: _wsService.isConnected,
+                  isConnected: _wsConnected && _wsService.isConnected,
+                  columnOrder: _wsService.columnOrder, // NOUVEAU: Ordre des colonnes du backend
                 ),
 
                 // Sections de debug pliables

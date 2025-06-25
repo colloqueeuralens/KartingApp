@@ -175,17 +175,12 @@ class FirebaseSyncService:
     
     async def save_null_mappings_to_circuit(self, circuit_id: str) -> bool:
         """Save null mappings to Firebase for a circuit that failed auto-detection"""
-        print(f"🔥 DEBUG FIREBASE: === DÉBUT SAVE_NULL_MAPPINGS ===")
-        print(f"🔥 DEBUG FIREBASE: Circuit ID: {circuit_id}")
         
         try:
-            print(f"🔥 DEBUG FIREBASE: Récupération de la DB...")
             db = self._get_db()
-            print(f"🔥 DEBUG FIREBASE: DB récupérée: {db is not None}")
             
             # Create null mappings for C1-C14
             null_mappings = {f'c{i}': None for i in range(1, 15)}
-            print(f"🔥 DEBUG FIREBASE: Mappings null créés: {null_mappings}")
             
             # Add metadata about auto-detection failure
             update_data = {
@@ -195,34 +190,24 @@ class FirebaseSyncService:
                 'configurationRequired': True,
                 'updatedAt': datetime.now()
             }
-            print(f"🔥 DEBUG FIREBASE: Data à mettre à jour: {list(update_data.keys())}")
             
             # Update the circuit document
-            print(f"🔥 DEBUG FIREBASE: Mise à jour du document circuit {circuit_id}...")
             doc_ref = db.collection('circuits').document(circuit_id)
             doc_ref.update(update_data)
-            print(f"🔥 DEBUG FIREBASE: Mise à jour réussie!")
             
-            logger.info(f"✅ Saved null mappings to Firebase for circuit {circuit_id}")
+            logger.info(f"Saved null mappings to Firebase for circuit {circuit_id}")
             return True
             
         except Exception as e:
-            print(f"❌ DEBUG FIREBASE: ERREUR: {e}")
             import traceback
-            print(f"❌ DEBUG FIREBASE: Stack trace: {traceback.format_exc()}")
-            logger.error(f"❌ Error saving null mappings to Firebase for circuit {circuit_id}: {e}")
+            logger.error(f"Error saving null mappings to Firebase for circuit {circuit_id}: {e}")
             return False
 
     async def update_circuit_mappings(self, circuit_id: str, mappings: Dict[str, str]) -> bool:
         """Update circuit mappings in Firebase with auto-detected values"""
-        print(f"✅ DEBUG FIREBASE: === DÉBUT UPDATE_CIRCUIT_MAPPINGS ===")
-        print(f"✅ DEBUG FIREBASE: Circuit ID: {circuit_id}")
-        print(f"✅ DEBUG FIREBASE: Mappings reçus: {mappings}")
         
         try:
-            print(f"✅ DEBUG FIREBASE: Récupération de la DB...")
             db = self._get_db()
-            print(f"✅ DEBUG FIREBASE: DB récupérée: {db is not None}")
             
             # Préparer les données de mise à jour
             update_data = {
@@ -232,25 +217,20 @@ class FirebaseSyncService:
                 'configurationRequired': False,
                 'updatedAt': datetime.now()
             }
-            print(f"✅ DEBUG FIREBASE: Data à mettre à jour: {list(update_data.keys())}")
-            print(f"✅ DEBUG FIREBASE: Mappings détectés: {mappings}")
             
             # Update the circuit document
-            print(f"✅ DEBUG FIREBASE: Mise à jour du document circuit {circuit_id}...")
             doc_ref = db.collection('circuits').document(circuit_id)
             doc_ref.update(update_data)
-            print(f"✅ DEBUG FIREBASE: Mise à jour réussie!")
             
-            logger.info(f"✅ Saved auto-detected mappings to Firebase for circuit {circuit_id}")
-            logger.info(f"📊 Mappings saved: {mappings}")
+            logger.info(f"Saved auto-detected mappings to Firebase for circuit {circuit_id}")
+            logger.info(f"Mappings saved: {mappings}")
             return True
             
         except Exception as e:
-            print(f"❌ DEBUG FIREBASE: ERREUR: {e}")
             import traceback
-            print(f"❌ DEBUG FIREBASE: Stack trace: {traceback.format_exc()}")
-            logger.error(f"❌ Error updating circuit mappings in Firebase for circuit {circuit_id}: {e}")
+            logger.error(f"Error updating circuit mappings in Firebase for circuit {circuit_id}: {e}")
             return False
+    
 
 
 # Global service instance
