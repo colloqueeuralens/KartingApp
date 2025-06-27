@@ -123,6 +123,7 @@ class _StrategyCardState extends State<StrategyCard>
                   borderRadius: BorderRadius.circular(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildHeader(accentColor),
                       if (!widget.isCollapsed) _buildContent(),
@@ -233,11 +234,9 @@ class _StrategyCardState extends State<StrategyCard>
   }
 
   Widget _buildContent() {
-    return Flexible(
-      child: Container(
-        padding: widget.padding ?? const EdgeInsets.all(16),
-        child: widget.child,
-      ),
+    return Container(
+      padding: widget.padding ?? const EdgeInsets.all(16),
+      child: widget.child,
     );
   }
 }
@@ -281,6 +280,7 @@ class StrategyMetricCard extends StatelessWidget {
               )
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     value,
@@ -334,6 +334,7 @@ class StrategyStatusCard extends StatelessWidget {
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -406,6 +407,7 @@ class StrategyActionCard extends StatelessWidget {
       accentColor: color,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (description != null) ...[
             Text(
@@ -417,12 +419,9 @@ class StrategyActionCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
-          Expanded(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
                   onPressed: isLoading ? null : onPressed,
                   icon: isLoading
                       ? SizedBox(
@@ -447,9 +446,7 @@ class StrategyActionCard extends StatelessWidget {
                     elevation: 0,
                   ),
                 ),
-              ),
             ),
-          ),
         ],
       ),
     );

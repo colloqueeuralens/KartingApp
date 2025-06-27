@@ -1,13 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../services/strategy_service.dart';
+import 'dart:ui';
+import '../../services/kmrs_service.dart';
 import '../../widgets/common/app_bar_actions.dart';
-import '../../widgets/strategy/strategy_card.dart';
-import '../../widgets/strategy/strategy_data_grid.dart';
+import '../../widgets/common/glassmorphism_container.dart';
+import '../../widgets/common/glassmorphism_tab_bar.dart';
 import '../../theme/racing_theme.dart';
-import '../../models/strategy_models.dart';
+import '../../models/kmrs_models.dart';
+import '../../widgets/kmrs/kmrs_start_page.dart';
+import '../../widgets/kmrs/kmrs_main_page.dart';
+import '../../widgets/kmrs/kmrs_calculations_page.dart';
+import '../../widgets/kmrs/kmrs_racing_page.dart';
+import '../../widgets/kmrs/kmrs_stints_page.dart';
+import '../../widgets/kmrs/kmrs_pilots_page.dart';
+import '../../widgets/kmrs/kmrs_simulator_page.dart';
 
-/// Écran de stratégie racing reproduisant les fonctionnalités KMRS.xlsm
+/// Interface KMRS complète reproduisant KMRS.xlsm
 class StrategyScreen extends StatefulWidget {
   final VoidCallback? onBackToConfig;
 
@@ -23,15 +31,49 @@ class StrategyScreen extends StatefulWidget {
 class _StrategyScreenState extends State<StrategyScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
-  final StrategyService _strategyService = StrategyService();
+  final KmrsService _kmrsService = KmrsService();
   bool _isInitialized = false;
+  
+  // Onglets KMRS avec configuration glassmorphism
+  late List<GlassmorphismTab> _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 0, vsync: this);
-    _initializeStrategy();
+    _tabs = [
+      const GlassmorphismTab(
+        title: 'Configuration',
+        subtitle: 'Paramètres KMRS',
+        icon: Icons.settings,
+      ),
+      const GlassmorphismTab(
+        title: 'Chronométrage',
+        subtitle: 'Relais et calculs',
+        icon: Icons.timer,
+      ),
+      const GlassmorphismTab(
+        title: 'Course',
+        subtitle: 'Interface 16x22',
+        icon: Icons.sports_motorsports,
+      ),
+      const GlassmorphismTab(
+        title: 'Historique',
+        subtitle: 'Liste des relais',
+        icon: Icons.list_alt,
+      ),
+      const GlassmorphismTab(
+        title: 'Pilotes',
+        subtitle: 'Statistiques équipe',
+        icon: Icons.people,
+      ),
+    ];
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(() {
+      setState(() {}); // Force rebuild when tab changes
+    });
+    _initializeKmrs();
   }
+
 
   @override
   void dispose() {
@@ -39,23 +81,21 @@ class _StrategyScreenState extends State<StrategyScreen>
     super.dispose();
   }
 
-  Future<void> _initializeStrategy() async {
+  Future<void> _initializeKmrs() async {
     if (_isInitialized) return;
 
     try {
-      await _strategyService.loadOrCreateDocument();
+      await _kmrsService.loadOrCreateSession();
       
-      if (mounted && _strategyService.sheets.isNotEmpty) {
+      if (mounted) {
         setState(() {
-          _tabController.dispose();
-          _tabController = TabController(
-            length: _strategyService.sheets.length,
-            vsync: this,
-          );
           _isInitialized = true;
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('Erreur initialisation KMRS: $e');
+      }
     }
   }
 
@@ -63,102 +103,54 @@ class _StrategyScreenState extends State<StrategyScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: RacingTheme.racingGreen.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.psychology,
-                color: RacingTheme.racingGreen,
-                size: 24,
+        title: _buildGlassmorphismTitle(),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                RacingTheme.racingBlack,
+                RacingTheme.racingBlack.withValues(alpha: 0.9),
+                Colors.grey[900]!.withValues(alpha: 0.8),
+              ],
+            ),
+          ),
+          child: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: RacingTheme.racingGreen.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 12),
-            const Text(
-              'Stratégie Racing',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+          ),
         ),
-        backgroundColor: RacingTheme.racingBlack,
-        elevation: 4,
-        shadowColor: RacingTheme.racingGreen.withValues(alpha: 0.3),
         actions: AppBarActions.getResponsiveActions(
           context,
           onBackToConfig: widget.onBackToConfig,
         ),
-        bottom: _isInitialized && _strategyService.sheets.isNotEmpty
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        RacingTheme.racingBlack,
-                        RacingTheme.racingBlack.withValues(alpha: 0.8),
-                      ],
-                    ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: RacingTheme.racingGreen.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    labelColor: RacingTheme.racingGreen,
-                    unselectedLabelColor: Colors.white.withValues(alpha: 0.7),
-                    indicatorColor: RacingTheme.racingGreen,
-                    indicatorWeight: 3,
-                    labelStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                    tabs: _strategyService.sheets
-                        .map((sheet) => Tab(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _getSheetIcon(sheet.name),
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(sheet.name),
-                                  ],
-                                ),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                ),
+        bottom: _isInitialized
+            ? GlassmorphismAppBarBottom(
+                tabs: _tabs,
+                controller: _tabController,
+                accentColor: RacingTheme.racingGreen,
+                onTap: (index) {
+                  setState(() {}); // Force rebuild on tab tap
+                },
               )
             : null,
       ),
+      extendBodyBehindAppBar: true,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -167,64 +159,152 @@ class _StrategyScreenState extends State<StrategyScreen>
             colors: [
               RacingTheme.racingBlack,
               Colors.grey[900]!,
+              RacingTheme.racingBlack,
             ],
+            stops: const [0.0, 0.5, 1.0],
           ),
         ),
-        child: _buildBody(),
+        child: Padding(
+          padding: EdgeInsets.only(
+            top: MediaQuery.of(context).padding.top + kToolbarHeight + 85,
+          ),
+          child: _buildBody(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassmorphismTitle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: RacingTheme.racingGreen.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  RacingTheme.racingGreen.withValues(alpha: 0.2),
+                  RacingTheme.racingGreen.withValues(alpha: 0.1),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: RacingTheme.racingGreen.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.sports_motorsports,
+                    color: RacingTheme.racingGreen,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'KMRS Racing',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Stratégie Karting',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildBody() {
     return ListenableBuilder(
-      listenable: _strategyService,
+      listenable: _kmrsService,
       builder: (context, _) {
-        if (_strategyService.isLoading) {
+        if (_kmrsService.isLoading) {
           return _buildLoadingState();
         }
 
-        if (_strategyService.error != null) {
+        if (_kmrsService.error != null) {
           return _buildErrorState();
         }
 
-        if (!_isInitialized || _strategyService.sheets.isEmpty) {
+        if (!_isInitialized) {
           return _buildInitializingState();
         }
 
-        return _buildTabView();
+        return _buildKmrsTabView();
       },
     );
   }
 
   Widget _buildLoadingState() {
     return Center(
-      child: StrategyCard(
-        title: 'Chargement',
-        icon: Icons.sync,
-        accentColor: RacingTheme.racingGreen,
+      child: GlassmorphismContainer(
+        width: 400,
+        blur: 15,
+        opacity: 0.15,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(RacingTheme.racingGreen),
-              strokeWidth: 3,
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: RacingTheme.racingGreen.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(RacingTheme.racingGreen),
+                strokeWidth: 4,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
-              'Initialisation de la stratégie...',
+              'Initialisation KMRS',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Préparation des données de performance',
+              'Configuration du système de stratégie karting',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: Colors.white.withValues(alpha: 0.7),
                 fontSize: 14,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -234,57 +314,67 @@ class _StrategyScreenState extends State<StrategyScreen>
 
   Widget _buildErrorState() {
     return Center(
-      child: StrategyCard(
-        title: 'Erreur',
-        icon: Icons.error_outline,
-        accentColor: RacingTheme.bad,
+      child: GlassmorphismContainer(
+        width: 450,
+        blur: 15,
+        opacity: 0.15,
+        border: Border.all(
+          color: RacingTheme.bad.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.error_outline,
-              color: RacingTheme.bad,
-              size: 48,
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: RacingTheme.bad.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: Icon(
+                Icons.error_outline,
+                color: RacingTheme.bad,
+                size: 48,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
-              'Erreur de chargement',
+              'Erreur KMRS',
               style: TextStyle(
                 color: RacingTheme.bad,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
-              _strategyService.error ?? 'Erreur inconnue',
+              _kmrsService.error ?? 'Erreur inconnue lors de l\'initialisation',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.8),
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
+              maxLines: 3,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton.icon(
-                  onPressed: () => _strategyService.refresh(),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Réessayer'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: RacingTheme.racingGreen,
-                    foregroundColor: Colors.white,
+                Expanded(
+                  child: _buildErrorButton(
+                    label: 'Réessayer',
+                    icon: Icons.refresh,
+                    color: RacingTheme.racingGreen,
+                    onPressed: () => _kmrsService.loadOrCreateSession(),
                   ),
                 ),
                 const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: () => _strategyService.reset(),
-                  icon: const Icon(Icons.restart_alt),
-                  label: const Text('Réinitialiser'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
+                Expanded(
+                  child: _buildErrorButton(
+                    label: 'Réinitialiser',
+                    icon: Icons.restart_alt,
+                    color: Colors.orange,
+                    onPressed: () => _kmrsService.resetSession(),
                   ),
                 ),
               ],
@@ -295,40 +385,108 @@ class _StrategyScreenState extends State<StrategyScreen>
     );
   }
 
+  Widget _buildErrorButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withValues(alpha: 0.2),
+                color.withValues(alpha: 0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: color.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildInitializingState() {
     return Center(
-      child: StrategyCard(
-        title: 'Stratégie Racing',
-        subtitle: 'Système d\'analyse de performance karting',
-        icon: Icons.psychology,
-        accentColor: RacingTheme.racingGreen,
+      child: GlassmorphismContainer(
+        width: 500,
+        blur: 20,
+        opacity: 0.15,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: RacingTheme.racingGreen.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    RacingTheme.racingGreen.withValues(alpha: 0.3),
+                    RacingTheme.racingGreen.withValues(alpha: 0.1),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: RacingTheme.racingGreen.withValues(alpha: 0.3),
+                  width: 2,
+                ),
               ),
               child: Icon(
-                Icons.speed,
+                Icons.sports_motorsports,
                 color: RacingTheme.racingGreen,
-                size: 48,
+                size: 56,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
-              'Système de Stratégie Prêt',
+              'KMRS Racing System',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 20,
+                color: Colors.white,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Text(
-              'Analyse de performance et recommandations stratégiques\npour optimiser vos sessions de karting',
+              'Karting Management Racing System',
+              style: TextStyle(
+                color: RacingTheme.racingGreen,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Interface complète de gestion stratégique\npour courses d\'endurance karting',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.7),
                 fontSize: 14,
@@ -336,25 +494,63 @@ class _StrategyScreenState extends State<StrategyScreen>
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: () async {
-                await _strategyService.loadOrCreateDocument();
-                if (mounted) {
-                  await _initializeStrategy();
-                }
-              },
-              icon: const Icon(Icons.analytics),
-              label: const Text('Démarrer l\'Analyse'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: RacingTheme.racingGreen,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: 40),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () async {
+                  await _kmrsService.loadOrCreateSession();
+                  if (mounted) {
+                    await _initializeKmrs();
+                  }
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        RacingTheme.racingGreen.withValues(alpha: 0.8),
+                        RacingTheme.racingGreen.withValues(alpha: 0.6),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: RacingTheme.racingGreen.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: RacingTheme.racingGreen.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Lancer KMRS',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -364,388 +560,43 @@ class _StrategyScreenState extends State<StrategyScreen>
     );
   }
 
-  Widget _buildTabView() {
-    return TabBarView(
+  Widget _buildKmrsTabView() {
+    return GlassmorphismTabBarView(
       controller: _tabController,
-      children: _strategyService.sheets.map((sheet) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: _buildSheetContent(sheet),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSheetContent(StrategySheet sheet) {
-    if (sheet.sections.isEmpty) {
-      return _buildEmptySheetState(sheet);
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // En-tête simple
-          _buildSimpleHeader(sheet),
-          
-          const SizedBox(height: 20),
-          
-          // Affichage simple des cellules
-          ...sheet.sections.map((section) => _buildSimpleSection(section)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSimpleHeader(StrategySheet sheet) {
-    final totalCells = sheet.sections
-        .map((s) => s.cells.length)
-        .fold(0, (a, b) => a + b);
-    
-    final formulaCells = sheet.sections
-        .map((s) => s.cells.values.where((c) => c.type == StrategyCellType.formula).length)
-        .fold(0, (a, b) => a + b);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _getSheetColor(sheet.name).withValues(alpha: 0.2),
-            _getSheetColor(sheet.name).withValues(alpha: 0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _getSheetColor(sheet.name).withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                _getSheetIcon(sheet.name),
-                color: _getSheetColor(sheet.name),
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      sheet.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (sheet.description.isNotEmpty)
-                      Text(
-                        sheet.description,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 14,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildSimpleMetric('Cellules', totalCells.toString(), Icons.grid_on),
-              const SizedBox(width: 20),
-              _buildSimpleMetric('Formules', formulaCells.toString(), Icons.functions),
-              const SizedBox(width: 20),
-              _buildSimpleMetric('Sections', sheet.sections.length.toString(), Icons.view_module),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildSimpleMetric(String label, String value, IconData icon) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+      animationDuration: const Duration(milliseconds: 250),
       children: [
-        Icon(icon, color: RacingTheme.racingGreen, size: 16),
-        const SizedBox(width: 8),
-        Text(
-          '$label: $value',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
+        // Configuration KMRS
+        KmrsStartPage(
+          kmrsService: _kmrsService,
+          onConfigurationChanged: (config) => _kmrsService.updateConfiguration(config),
+        ),
+        
+        // Chronométrage et relais
+        KmrsMainPage(
+          kmrsService: _kmrsService,
+          onStintAdded: (pilotId, duration, pitTime, pitInTime, pitOutTime, notes) => 
+            _kmrsService.addStint(pilotId, duration, pitTime, pitInTime: pitInTime, pitOutTime: pitOutTime, notes: notes),
+        ),
+        
+        // Interface de course
+        KmrsRacingPage(
+          kmrsService: _kmrsService,
+        ),
+        
+        // Gestion des relais
+        KmrsStintsPage(
+          kmrsService: _kmrsService,
+          onStintUpdated: (stint) => _kmrsService.updateStint(stint),
+          onStintRemoved: (stintId) => _kmrsService.removeStint(stintId),
+        ),
+        
+        // Statistiques des pilotes
+        KmrsPilotsPage(
+          kmrsService: _kmrsService,
+          onPilotUpdated: (pilot) => _kmrsService.updatePilot(pilot),
         ),
       ],
     );
   }
-  
-  Widget _buildSimpleSection(StrategySection section) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: RacingTheme.racingGreen.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.grid_on,
-                color: RacingTheme.racingGreen,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      section.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (section.description.isNotEmpty)
-                      Text(
-                        section.description,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 12,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildSimpleCellList(section),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildSimpleCellList(StrategySection section) {
-    if (section.cells.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: Text(
-            'Aucune donnée disponible',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 14,
-            ),
-          ),
-        ),
-      );
-    }
 
-    final sortedCells = section.cells.entries.toList()
-      ..sort((a, b) {
-        final aMatch = RegExp(r'([A-Z]+)(\d+)').firstMatch(a.key);
-        final bMatch = RegExp(r'([A-Z]+)(\d+)').firstMatch(b.key);
-        
-        if (aMatch != null && bMatch != null) {
-          final aRow = int.parse(aMatch.group(2)!);
-          final bRow = int.parse(bMatch.group(2)!);
-          if (aRow != bRow) return aRow.compareTo(bRow);
-          return aMatch.group(1)!.compareTo(bMatch.group(1)!);
-        }
-        return a.key.compareTo(b.key);
-      });
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: sortedCells.map((entry) {
-        return _buildSimpleCell(entry.key, entry.value);
-      }).toList(),
-    );
-  }
-  
-  Widget _buildSimpleCell(String cellId, StrategyCell cell) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _getSimpleCellColor(cell),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: RacingTheme.racingGreen.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            cellId,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.8),
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _formatSimpleCellValue(cell),
-            style: TextStyle(
-              color: _getSimpleCellTextColor(cell),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Color _getSimpleCellColor(StrategyCell cell) {
-    switch (cell.type) {
-      case StrategyCellType.formula:
-        return Colors.blue.withValues(alpha: 0.1);
-      case StrategyCellType.number:
-        return RacingTheme.racingGreen.withValues(alpha: 0.1);
-      case StrategyCellType.result:
-        return Colors.orange.withValues(alpha: 0.1);
-      case StrategyCellType.boolean:
-        return cell.value == true 
-            ? RacingTheme.good.withValues(alpha: 0.1)
-            : RacingTheme.bad.withValues(alpha: 0.1);
-      default:
-        return Colors.white.withValues(alpha: 0.05);
-    }
-  }
-  
-  Color _getSimpleCellTextColor(StrategyCell cell) {
-    switch (cell.type) {
-      case StrategyCellType.formula:
-        return Colors.lightBlue;
-      case StrategyCellType.number:
-        return RacingTheme.racingGreen;
-      case StrategyCellType.result:
-        return Colors.orange;
-      case StrategyCellType.boolean:
-        return cell.value == true ? RacingTheme.good : RacingTheme.bad;
-      default:
-        return Colors.white;
-    }
-  }
-  
-  String _formatSimpleCellValue(StrategyCell cell) {
-    if (cell.value == null) return '';
-
-    switch (cell.type) {
-      case StrategyCellType.number:
-        if (cell.value is num) {
-          return cell.value % 1 == 0
-              ? cell.value.toInt().toString()
-              : cell.value.toStringAsFixed(2);
-        }
-        break;
-      case StrategyCellType.percentage:
-        if (cell.value is num) {
-          return '${(cell.value * 100).toStringAsFixed(1)}%';
-        }
-        break;
-      case StrategyCellType.boolean:
-        return cell.value == true ? 'Oui' : 'Non';
-      case StrategyCellType.formula:
-        return cell.formula ?? cell.value?.toString() ?? '';
-      default:
-        return cell.value.toString();
-    }
-
-    return cell.value.toString();
-  }
-
-  Widget _buildEmptySheetState(StrategySheet sheet) {
-    return Center(
-      child: StrategyCard(
-        title: 'Feuille en Construction',
-        subtitle: 'Cette section sera alimentée selon votre analyse KMRS',
-        icon: Icons.construction,
-        accentColor: Colors.orange,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.engineering,
-              color: Colors.orange,
-              size: 64,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Section "${sheet.name}" en développement',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Cette feuille sera configurée après analyse\ndu fichier KMRS.xlsm correspondant',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _onCellChanged(String sheetName, String cellId, dynamic value) {
-    _strategyService.updateCell(sheetName, cellId, value);
-  }
-
-  IconData _getSheetIcon(String sheetName) {
-    final name = sheetName.toLowerCase();
-    if (name.contains('start') || name.contains('page')) return Icons.settings;
-    if (name.contains('main') || name.contains('page')) return Icons.dashboard;
-    if (name.contains('calculation') || name.contains('calc')) return Icons.calculate;
-    if (name.contains('racing')) return Icons.speed;
-    if (name.contains('stint') || name.contains('list')) return Icons.schedule;
-    if (name.contains('rapport') || name.contains('pilot')) return Icons.person;
-    if (name.contains('simulateur') || name.contains('simul')) return Icons.science;
-    return Icons.analytics;
-  }
-
-  Color _getSheetColor(String sheetName) {
-    final name = sheetName.toLowerCase();
-    if (name.contains('start') || name.contains('page')) return Colors.blue;
-    if (name.contains('main') || name.contains('page')) return RacingTheme.racingGreen;
-    if (name.contains('calculation') || name.contains('calc')) return Colors.orange;
-    if (name.contains('racing')) return Colors.red;
-    if (name.contains('stint') || name.contains('list')) return Colors.purple;
-    if (name.contains('rapport') || name.contains('pilot')) return Colors.teal;
-    if (name.contains('simulateur') || name.contains('simul')) return Colors.indigo;
-    return RacingTheme.racingGreen;
-  }
 }

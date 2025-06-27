@@ -1,0 +1,75 @@
+Start Page
+
+14 INPUT
+
+Race Duration (Hours) - Numbers
+Minimum Stint Time (Minutes) - Numbers
+Maximum Stint Time (Minutes) - Numbers
+Required Pitstops - Numbers
+Pit Lane Closed Start of Race (Minutes) - Numbers
+Pit Lane Closed End of Race (Minutes) - Numbers
+Pitstop Fix - Numbers
+Temps Roulage Min/Pilote - Numbers
+Temps Roulage Max/Pilote - Numbers
+
+
+Main Page
+
+5 INPUT
+
+Last stint duration (mm:ss) - Numbers
+Pitstop (mm:ss) - Numbers
+Pit In (mm:ss) - Numbers 
+Pit Out (mm:ss) - Numbers
+
+1 Tableau Tracking Driving Time
+
+Pilotes | Driving Timing | NB Relais | TempsMiniRestant | TempsMaxRestants
+
+1 Tableau Strategie Calculation
+
+Regular Stints | Joker Stints | AVG Joker Stints Duration
+
+1 Tableau Suivi de Course
+
+Stints # | Time Remaining decreasing | Pilote | Stint Duration | Pit | Pit In | Pit Out
+
+
+Formule Relais Long Restant
+
+=ENT(
+  (B7 - B12 * 'Start Page'!B2 - 'Main Page'!B11 * 'Main Page'!B10)
+  / ('Start Page'!B3- 'Start Page'!B2)
+)
+
+(Remaining Time in Minutes - Required Stint Remaining * Minimum Stint Time - Required Stop Remaining * Remaining Time until Pitlane Closes)/(Maximum Stint Time (Minutes)
+-Minimum Stint Time (Minutes))
+
+240 - 8 * 15 - 7 * 
+
+X × Durée_max + (Nombre_total_relais - X) × Durée_min ≤ Temps_effectif
+
+
+Exemple 
+
+Race Duration (Hours)	4
+Minimum Stint Time (Minutes)	15
+Maximum Stint Time (Minutes)	50
+Required Pitstops	7
+Pit Lane Closed Start of Race (Minutes)	15
+Pit Lane Closed End of Race (Minutes)	15
+Pitstop Fix	02:00
+Temps Roulage Min/Pilote	120
+Temps Roulage Max/Pilote	240
+
+Formule Joker
+
+=B12-B16
+
+Formule Joker Moyen
+
+=SI(B17>0;( B8 - B16 * 'Start Page'!$B$3- (B9-1) * 'Start Page'!$B$10)/ B17; 0)
+
+Calcul de Marge
+
+Marge = Nb_arrêts × (Max_stint - (Durée_totale_minutes / Nb_arrêts))

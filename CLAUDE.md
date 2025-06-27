@@ -161,6 +161,62 @@ The app calculates an "optimal moment" indicator based on performance thresholds
 Shows green "C'EST LE MOMENT!" when percentage of good performances (++ or +) meets threshold.
 Implementation: `lib/widgets/dashboard/racing_kart_grid_view.dart:465-490`
 
+### KMRS Mobile-Responsive Tables - PRODUCTION READY ✅
+**Complete responsive table system with ultra-compact mobile design**
+
+**Core Features:**
+- **Multi-Breakpoint System**: Mobile (<600px), Tablet (600-1200px), Desktop (≥1200px)
+- **Zero Horizontal Scrolling**: All columns visible simultaneously on mobile
+- **Ultra-Compact Typography**: 8px headers, 7px data for mobile optimization
+- **Intelligent Flex Ratios**: Optimized column distribution for each screen size
+- **Smart Header Abbreviation**: Mobile-friendly column headers (e.g., "Dur." for "Durée")
+- **Uniform Duration Format**: HH:MM:SS across all breakpoints for consistency
+
+**Technical Implementation:**
+```dart
+// Helper function pour créer des headers responsive
+Widget _buildResponsiveTableHeader(List<String> headers, List<int> flexValues, Color accentColor, {List<String>? mobileHeaders}) {
+  final screenWidth = MediaQuery.of(context).size.width;
+  final isMobile = screenWidth < 600;
+  
+  return Container(
+    padding: EdgeInsets.all(isMobile ? 2 : 6),
+    child: Row(
+      children: displayHeaders.asMap().entries.map((entry) {
+        return Expanded(
+          flex: flex,
+          child: Text(
+            header,
+            style: TextStyle(
+              fontSize: isMobile ? 8 : 14, // Ultra-compact mobile fonts
+            ),
+          ),
+        );
+      }).toList(),
+    ),
+  );
+}
+```
+
+**Performance Features:**
+- ✅ **Elimina Horizontal Scroll**: Complete table visibility on mobile
+- ✅ **Ultra-Compact Fonts**: 8px/7px fonts for maximum information density
+- ✅ **Smart Column Distribution**: Intelligent flex ratios per breakpoint
+- ✅ **Responsive Headers**: Abbreviated headers for mobile space efficiency
+- ✅ **Consistent Duration Format**: Complete HH:MM:SS format everywhere
+- ✅ **Zero RenderFlex Overflow**: Robust constraint handling
+- ✅ **Production Ready**: Clean implementation without debug artifacts
+
+**Mobile Font Specifications:**
+- **Headers**: 8px font size for maximum readability in minimal space
+- **Data**: 7px font size for ultra-compact information display
+- **Tablet**: 10px headers, 9px data (balanced approach)
+- **Desktop**: 14px headers, 12px data (full readability)
+
+**Files Updated:**
+- `lib/widgets/kmrs/kmrs_main_page.dart`: Complete responsive table implementation
+- `lib/widgets/common/glassmorphism_input_field.dart`: Fixed RenderFlex overflow
+
 ### Ultra-Fast Optimistic Drag & Drop System ⚡ - PRODUCTION READY
 **Revolutionary Performance Enhancement**: Sub-16ms UI response time with **ZERO visual duplication**
 
