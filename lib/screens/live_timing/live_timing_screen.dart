@@ -172,7 +172,21 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
   Future<void> _startTiming(String circuitId) async {
     setState(() {
       _errorMessage = null;
+      // NETTOYER COMPLÈTEMENT les données UI au démarrage d'une nouvelle session
+      _driversData.clear();
+      _lastTimingData = null;
+      _lastRawMessage = null;
     });
+
+    // Démarrer une nouvelle session de stockage des tours AVANT tout le reste
+    try {
+      await LiveTimingStorageService.startSession(circuitId);
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erreur lors du démarrage de la session de stockage: $e';
+      });
+      return;
+    }
 
     // WebSocket-first approach - Connect to WebSocket first
     await _connectToTiming(circuitId);
@@ -200,14 +214,6 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
         });
       }
       return;
-    }
-
-    // Démarrer une nouvelle session de stockage des tours
-    try {
-      await LiveTimingStorageService.startSession(circuitId);
-    } catch (e) {
-      // Log l'erreur mais ne bloque pas le timing
-      print('Erreur lors du démarrage de la session de stockage: $e');
     }
 
     // Activer la détection automatique des tours
@@ -258,10 +264,14 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
   Future<void> _startSimulation(String circuitId) async {
     setState(() {
       _errorMessage = null;
+      // NETTOYER COMPLÈTEMENT les données UI au démarrage d'une nouvelle simulation
+      _driversData.clear();
+      _lastTimingData = null;
+      _lastRawMessage = null;
     });
 
     try {
-      // Démarrer une session de stockage pour la simulation
+      // Démarrer une session de stockage pour la simulation AVANT tout le reste
       await LiveTimingStorageService.startSession(circuitId);
       
       // Activer la détection des tours pour la simulation
@@ -728,7 +738,20 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
           onBackToConfig: widget.onBackToConfig,
         ),
       ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              RacingTheme.racingBlack,
+              Colors.grey[900]!,
+              RacingTheme.racingBlack,
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ),
+        ),
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: SessionService.getSessionStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -788,6 +811,7 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
             ],
           );
         },
+        ),
       ),
     );
   }

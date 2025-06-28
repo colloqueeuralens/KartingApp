@@ -25,7 +25,9 @@ class LiveLapData {
     required Map<String, dynamic> timingData,
   }) {
     return LiveLapData(
-      id: '${kartId}_lap_${lapNumber}_${DateTime.now().millisecondsSinceEpoch}',
+      // ID UNIQUE et STABLE: même kartId + même lapNumber = même ID (pas de timestamp)
+      // Cela permet à Firebase de détecter automatiquement les doublons
+      id: '${kartId}_lap_${lapNumber}',
       kartId: kartId,
       lapNumber: lapNumber,
       lapTime: lapTime,
@@ -98,9 +100,22 @@ class LiveTimingHistory {
     );
   }
 
-  /// Ajouter un nouveau tour à l'historique
+  /// Ajouter un nouveau tour à l'historique avec déduplication automatique
   LiveTimingHistory addLap(LiveLapData lap) {
-    final updatedLaps = List<LiveLapData>.from(allLaps)..add(lap);
+    final updatedLaps = List<LiveLapData>.from(allLaps);
+    
+    // DÉDUPLICATION: Vérifier si un tour avec le même numéro de tour existe déjà
+    final existingIndex = updatedLaps.indexWhere((existingLap) => 
+      existingLap.lapNumber == lap.lapNumber
+    );
+    
+    if (existingIndex != -1) {
+      // Remplacer le tour existant par le nouveau (mise à jour)
+      updatedLaps[existingIndex] = lap;
+    } else {
+      // Ajouter le nouveau tour
+      updatedLaps.add(lap);
+    }
     
     // Calculer le meilleur tour
     String newBestLap = bestLapTime;

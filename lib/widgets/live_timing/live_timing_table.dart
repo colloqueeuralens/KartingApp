@@ -22,6 +22,12 @@ class _LiveTimingTableState extends State<LiveTimingTable>
     with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  
+  // Système de tracking des meilleurs temps
+  Map<String, String> _personalBestTimes = {}; // Meilleurs temps personnels par pilote
+  String? _globalBestTime; // Meilleur temps global actuel
+  String? _globalBestPilot; // Pilote détenteur du record global
+  Map<String, String> _recentImprovements = {}; // Améliorations récentes (temporaires)
 
   /// Ordre des colonnes fixe et logique pour éviter le mélange aléatoire
   static const List<String> _fixedColumnOrder = [
@@ -222,6 +228,9 @@ class _LiveTimingTableState extends State<LiveTimingTable>
     } else if (!widget.isConnected && oldWidget.isConnected) {
       _pulseController.stop();
     }
+    
+    // Mettre à jour le système de tracking des meilleurs temps
+    _updateBestTimesTracking();
   }
 
   @override
@@ -230,34 +239,121 @@ class _LiveTimingTableState extends State<LiveTimingTable>
     super.dispose();
   }
 
+  /// Mettre à jour le système de tracking des meilleurs temps
+  void _updateBestTimesTracking() {
+    _recentImprovements.clear();
+    String? newGlobalBest;
+    String? newGlobalPilot;
+    
+    for (final driver in sortedDrivers) {
+      final pilotId = driver['_driverId'] as String;
+      final currentBest = _getBestTimeFromDriver(driver);
+      
+      if (currentBest != null && _isValidTime(currentBest)) {
+        // Vérifier amélioration personnelle
+        final previousBest = _personalBestTimes[pilotId];
+        if (previousBest == null || _isTimeBetter(currentBest, previousBest)) {
+          _personalBestTimes[pilotId] = currentBest;
+          
+          // Si c'était une amélioration, la marquer temporairement
+          if (previousBest != null) {
+            _recentImprovements[pilotId] = currentBest;
+            
+            // Supprimer l'amélioration après 5 secondes
+            Future.delayed(const Duration(seconds: 5), () {
+              if (mounted) {
+                setState(() {
+                  _recentImprovements.remove(pilotId);
+                });
+              }
+            });
+          }
+        }
+        
+        // Vérifier meilleur temps global
+        if (newGlobalBest == null || _isTimeBetter(currentBest, newGlobalBest)) {
+          newGlobalBest = currentBest;
+          newGlobalPilot = pilotId;
+        }
+      }
+    }
+    
+    // Mettre à jour le record global
+    if (newGlobalBest != null && newGlobalBest != _globalBestTime) {
+      _globalBestTime = newGlobalBest;
+      _globalBestPilot = newGlobalPilot;
+    }
+  }
+
+  /// Extraire le meilleur temps d'un pilote depuis ses données
+  String? _getBestTimeFromDriver(Map<String, dynamic> driver) {
+    final possibleKeys = ['Meilleur T.', 'Meilleur', 'Best Lap', 'Best', 'Meilleur Temps'];
+    
+    for (final key in possibleKeys) {
+      final value = driver[key]?.toString();
+      if (value != null && _isValidTime(value)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  /// Vérifier si un temps est valide
+  bool _isValidTime(String time) {
+    return time.isNotEmpty && 
+           time != '--:--:---' && 
+           time != '--:--' && 
+           time != '0:00.000' &&
+           time != '00:00:000';
+  }
+
+  /// Comparer deux temps pour déterminer lequel est meilleur
+  bool _isTimeBetter(String time1, String time2) {
+    try {
+      final duration1 = _parseTime(time1);
+      final duration2 = _parseTime(time2);
+      return duration1 < duration2;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Parser un temps vers Duration
+  Duration _parseTime(String timeStr) {
+    if (!_isValidTime(timeStr)) return Duration.zero;
+
+    try {
+      final parts = timeStr.split(':');
+      if (parts.length == 2) {
+        final minutes = int.parse(parts[0]);
+        final secondsParts = parts[1].split('.');
+        final seconds = int.parse(secondsParts[0]);
+        final milliseconds = secondsParts.length > 1 
+            ? int.parse(secondsParts[1].padRight(3, '0').substring(0, 3))
+            : 0;
+        return Duration(minutes: minutes, seconds: seconds, milliseconds: milliseconds);
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+    return Duration.zero;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            RacingTheme.racingBlack,
-            RacingTheme.racingBlack.withValues(alpha: 0.95),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: const Color(0xFF262626),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: widget.isConnected
+              ? RacingTheme.racingGreen.withValues(alpha: 0.5)
+              : Colors.grey.withValues(alpha: 0.3),
+          width: 2,
         ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: RacingTheme.racingShadow,
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: widget.isConnected
-                ? RacingTheme.racingGreen.withValues(alpha: 0.5)
-                : Colors.grey.withValues(alpha: 0.3),
-            width: 2,
-          ),
-        ),
-        child: Column(children: [_buildHeader(), _buildTableContent()]),
-      ),
+      child: Column(children: [_buildHeader(), _buildTableContent()]),
     );
   }
 
@@ -274,8 +370,8 @@ class _LiveTimingTableState extends State<LiveTimingTable>
           end: Alignment.centerRight,
         ),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(14),
-          topRight: Radius.circular(14),
+          topLeft: Radius.circular(6),
+          topRight: Radius.circular(6),
         ),
       ),
       child: Row(
@@ -293,10 +389,10 @@ class _LiveTimingTableState extends State<LiveTimingTable>
             child: Text(
               'LIVE TIMING BOARD',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 1.5,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: RacingTheme.racingGreen,
+                letterSpacing: 0.5,
               ),
             ),
           ),
@@ -408,12 +504,10 @@ class _LiveTimingTableState extends State<LiveTimingTable>
             vertical: screenWidth < 600 ? 8 : 12,
           ),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.5),
-            border: Border(
-              bottom: BorderSide(
-                color: RacingTheme.racingGreen.withValues(alpha: 0.3),
-                width: 1,
-              ),
+            color: const Color(0xFF374151).withValues(alpha: 0.3),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(6),
+              topRight: Radius.circular(6),
             ),
           ),
           child: Row(
@@ -455,6 +549,9 @@ class _LiveTimingTableState extends State<LiveTimingTable>
               isLast: index == drivers.length - 1,
               getRowBackgroundColor: getRowBackgroundColor,
               getResponsiveFlex: (header) => getResponsiveFlex(header, context),
+              globalBestTime: _globalBestTime,
+              globalBestPilot: _globalBestPilot,
+              recentImprovements: _recentImprovements,
             );
           },
         );
@@ -474,10 +571,10 @@ class _HeaderCell extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontSize: isMobile ? 10 : 12,
-        fontWeight: FontWeight.bold,
-        color: RacingTheme.racingGreen,
-        letterSpacing: isMobile ? 0.5 : 1.0,
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        color: const Color(0xFF9CA3AF),
+        letterSpacing: 0.5,
       ),
       textAlign: TextAlign.center,
       overflow: TextOverflow.ellipsis,
@@ -492,6 +589,9 @@ class _DynamicTimingRow extends StatefulWidget {
   final bool isLast;
   final Color? Function(int position) getRowBackgroundColor;
   final int Function(String header) getResponsiveFlex;
+  final String? globalBestTime;
+  final String? globalBestPilot;
+  final Map<String, String> recentImprovements;
 
   const _DynamicTimingRow({
     required this.driver,
@@ -500,6 +600,9 @@ class _DynamicTimingRow extends StatefulWidget {
     required this.isLast,
     required this.getRowBackgroundColor,
     required this.getResponsiveFlex,
+    required this.globalBestTime,
+    required this.globalBestPilot,
+    required this.recentImprovements,
   });
 
   @override
@@ -552,14 +655,32 @@ class _DynamicTimingRowState extends State<_DynamicTimingRow>
     super.dispose();
   }
 
+
+  /// Obtenir la position du pilote de manière flexible (simulation et données réelles)
+  int _getDriverPosition() {
+    // Essayer plusieurs clés possibles pour la position
+    final possibleKeys = ['Classement', 'Position', 'Pos.', 'Clt', 'Pos'];
+    
+    for (final key in possibleKeys) {
+      final value = widget.driver[key]?.toString();
+      if (value != null && value.isNotEmpty && value != '--') {
+        final position = int.tryParse(value);
+        if (position != null && position > 0) {
+          return position;
+        }
+      }
+    }
+    
+    return 999; // Position par défaut si aucune trouvée
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 
-    // Obtenir la position pour la couleur du podium
-    final position =
-        int.tryParse(widget.driver['Classement']?.toString() ?? '999') ?? 999;
+    // Obtenir la position pour la couleur du podium (flexible pour simulation et données réelles)
+    final position = _getDriverPosition();
     final podiumColor = widget.getRowBackgroundColor(position);
 
     return AnimatedBuilder(
@@ -579,8 +700,8 @@ class _DynamicTimingRowState extends State<_DynamicTimingRow>
           backgroundColor = _highlightAnimation.value;
           if (backgroundColor == null || backgroundColor == Colors.transparent) {
             backgroundColor = widget.isEven
-                ? Colors.black.withValues(alpha: 0.2)
-                : Colors.transparent;
+                ? const Color(0xFF374151).withValues(alpha: 0.2)
+                : const Color(0xFF1F2937).withValues(alpha: 0.1);
           }
         }
 
@@ -593,8 +714,8 @@ class _DynamicTimingRowState extends State<_DynamicTimingRow>
             color: backgroundColor,
             borderRadius: widget.isLast
                 ? const BorderRadius.only(
-                    bottomLeft: Radius.circular(14),
-                    bottomRight: Radius.circular(14),
+                    bottomLeft: Radius.circular(6),
+                    bottomRight: Radius.circular(6),
                   )
                 : null,
           ),
@@ -613,37 +734,85 @@ class _DynamicTimingRowState extends State<_DynamicTimingRow>
     );
   }
 
+  /// Vérifier si un temps est valide
+  bool _isValidTime(String time) {
+    return time.isNotEmpty && 
+           time != '--:--:---' && 
+           time != '--:--' && 
+           time != '0:00.000' &&
+           time != '00:00:000';
+  }
+
+  /// Vérifier si une colonne contient des temps de tour
+  bool _isTimeColumn(String header) {
+    final timeHeaders = [
+      'Meilleur T.', 'Dernier T.', 'Meilleur', 'Dernier',
+      'Best Lap', 'Last Lap', 'Meilleur Temps', 'Dernier Temps'
+    ];
+    return timeHeaders.any((timeHeader) => header.contains(timeHeader)) ||
+           header.toLowerCase().contains('time') ||
+           header.toLowerCase().contains('temps');
+  }
+
   Widget _buildDynamicCell(String header, bool isMobile) {
     final value = widget.driver[header]?.toString() ?? '';
+    final pilotId = widget.driver['_driverId'] as String;
 
-    // Styling spécial selon le type de colonne
+    // Styling spécial selon le type de colonne et les systèmes de couleurs
     Color textColor = Colors.white;
     FontWeight fontWeight = FontWeight.normal;
+    Color? backgroundColor;
 
-    if (header == 'Classement') {
-      fontWeight = FontWeight.bold;
-      // Plus de couleur sur le numéro, maintenant c'est le background de la ligne
-      textColor = Colors.white;
+    // Vérifier si c'est une colonne de temps pour appliquer les couleurs spéciales
+    if (_isTimeColumn(header) && _isValidTime(value)) {
+      // PRIORITÉ 1: Meilleur tour global (violet/rose)
+      if (widget.globalBestTime != null && value == widget.globalBestTime && pilotId == widget.globalBestPilot) {
+        textColor = Colors.purple[300]!;
+        fontWeight = FontWeight.bold;
+        backgroundColor = Colors.purple.withValues(alpha: 0.2);
+      }
+      // PRIORITÉ 2: Amélioration personnelle récente (vert)
+      else if (widget.recentImprovements.containsKey(pilotId) && 
+               widget.recentImprovements[pilotId] == value) {
+        textColor = Colors.green[400]!;
+        fontWeight = FontWeight.bold;
+        backgroundColor = Colors.green.withValues(alpha: 0.2);
+      }
+      // Style normal pour les temps
+      else {
+        textColor = Colors.white;
+        fontWeight = FontWeight.w600;
+      }
     }
-
-    if (header.contains('T.')) {
-      // Temps
+    // Style pour les autres colonnes
+    else {
+      if (header == 'Classement' || header == 'Position' || header == 'Pos.' || header == 'Clt') {
+        fontWeight = FontWeight.bold;
+      }
       textColor = Colors.white;
-      fontWeight = FontWeight.w600;
     }
 
     return Center(
-      child: Text(
-        value,
-        style: TextStyle(
-          fontSize: isMobile ? 11 : 13,
-          fontWeight: fontWeight,
-          color: textColor,
-          fontFamily: header.contains('T.') ? 'monospace' : null,
+      child: Container(
+        padding: backgroundColor != null ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2) : null,
+        decoration: backgroundColor != null
+            ? BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(4),
+              )
+            : null,
+        child: Text(
+          value,
+          style: TextStyle(
+            fontSize: isMobile ? 11 : 13,
+            fontWeight: fontWeight,
+            color: textColor,
+            fontFamily: _isTimeColumn(header) ? 'monospace' : null,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          maxLines: isMobile ? 1 : 2,
         ),
-        textAlign: TextAlign.center,
-        overflow: TextOverflow.ellipsis,
-        maxLines: isMobile ? 1 : 2,
       ),
     );
   }

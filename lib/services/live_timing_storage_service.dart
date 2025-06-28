@@ -24,6 +24,10 @@ class LiveTimingStorageService {
   /// Démarrer une nouvelle session de timing
   static Future<LiveTimingSession> startSession(String circuitId) async {
     try {
+      // NETTOYER COMPLÈTEMENT l'état précédent avant de créer une nouvelle session
+      _currentSession = null;
+      _localCache.clear();
+      
       final session = LiveTimingSession.create(circuitId: circuitId);
       
       // Stocker dans Firebase
@@ -32,11 +36,10 @@ class LiveTimingStorageService {
           .doc(session.sessionId)
           .set(session.toMap());
       
-      // Mettre à jour le cache local
+      // Mettre à jour le cache local avec la nouvelle session
       _currentSession = session;
-      _localCache.clear();
       
-      // Notifier les listeners
+      // Notifier les listeners avec la session vide
       _sessionController.add(session);
       
       return session;
@@ -65,24 +68,42 @@ class LiveTimingStorageService {
     }
   }
 
-  /// Stocker un nouveau tour
+  /// Stocker un nouveau tour avec protection contre les doublons
   static Future<void> storeLap(LiveLapData lap) async {
     if (_currentSession == null) {
       throw Exception('Aucune session active pour stocker le tour');
     }
 
     try {
-      // Mettre à jour la session avec le nouveau tour
+      // PROTECTION CONTRE LES DOUBLONS: Vérifier si le tour existe déjà en base
+      final existingLapDoc = await _firestore
+          .collection(_collectionName)
+          .doc(_currentSession!.sessionId)
+          .collection('laps')
+          .doc(lap.id)
+          .get();
+      
+      // Si le tour existe déjà ET a le même temps, ne pas le re-stocker
+      if (existingLapDoc.exists) {
+        final existingData = existingLapDoc.data()!;
+        final existingLapTime = existingData['lapTime'] as String?;
+        if (existingLapTime == lap.lapTime) {
+          // Tour identique déjà stocké, ignorer
+          return;
+        }
+      }
+      
+      // Mettre à jour la session avec le nouveau tour (déduplication automatique)
       _currentSession = _currentSession!.addLapForKart(lap.kartId, lap);
       
-      // Mettre à jour le cache local
+      // Mettre à jour le cache local (déduplication automatique)
       if (_localCache.containsKey(lap.kartId)) {
         _localCache[lap.kartId] = _localCache[lap.kartId]!.addLap(lap);
       } else {
         _localCache[lap.kartId] = LiveTimingHistory.create(lap.kartId).addLap(lap);
       }
       
-      // Stocker le tour individuel dans Firebase (sous-collection)
+      // Stocker le tour individuel dans Firebase (l'ID unique empêche les doublons)
       await _firestore
           .collection(_collectionName)
           .doc(_currentSession!.sessionId)
@@ -136,16 +157,18 @@ class LiveTimingStorageService {
     }
   }
 
-  /// Récupérer tous les tours d'un kart
+  /// Récupérer tous les tours d'un kart (UNIQUEMENT pour la session courante)
   static Future<List<LiveLapData>> getKartLaps(String kartId, {int? limit}) async {
+    // Si aucune session courante, retourner une liste vide
     if (_currentSession == null) {
       return [];
     }
     
     try {
+      // STRICTEMENT lié à la session courante pour éviter la contamination entre sessions
       Query query = _firestore
           .collection(_collectionName)
-          .doc(_currentSession!.sessionId)
+          .doc(_currentSession!.sessionId) // Utilise UNIQUEMENT la session courante
           .collection('laps')
           .where('kartId', isEqualTo: kartId)
           .orderBy('lapNumber');
@@ -160,7 +183,10 @@ class LiveTimingStorageService {
       for (final doc in snapshot.docs) {
         try {
           final lap = LiveLapData.fromFirestore(doc);
-          laps.add(lap);
+          // Double vérification: le tour doit appartenir à la session courante
+          if (lap.kartId == kartId) {
+            laps.add(lap);
+          }
         } catch (e) {
           // Ignorer les documents malformés
           continue;
