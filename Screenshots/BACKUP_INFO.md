@@ -33,6 +33,27 @@
 - **Tableau :** Colonnes #/TEMPS/HEURE/ÉCART avec highlighting du meilleur
 - **Sélecteur :** Cards rectangulaires horizontales avec numéros
 
-## Récupération
-⚠️ **BACKUP SUPPRIMÉ** - Le design tableau a été supprimé car non utilisé.
-L'interface actuelle avec cards glassmorphism est le design final et préféré.
+## Sauvegardes Disponibles
+
+### 1. **Design Cards Glassmorphism (Actuel)**
+- **Fichier backup :** `live_timing_history_tab_cards_backup.dart`
+- **Caractéristiques :**
+  - Cards compactes avec gradient vert/noir
+  - Sélecteur horizontal avec noms de pilotes
+  - Highlighting du dernier tour avec badge "DERNIER"
+  - Design glassmorphism moderne et élégant
+  - Ordre chronologique inverse
+
+### 2. **Design HTML-Style (En cours d'implémentation)**
+- **Caractéristiques prévues :**
+  - Tableau structuré avec colonnes #/TEMPS/HEURE/ÉCART
+  - Panel de statistiques en 3 cards horizontales
+  - Sélecteur de karts style rectangulaire
+  - Couleurs selon maquette HTML (#262626, #22c55e)
+  - Background principal gris foncé
+
+## Récupération du Design Cards
+Pour revenir au design cards glassmorphism :
+```bash
+cp lib/widgets/live_timing/live_timing_history_tab_cards_backup.dart lib/widgets/live_timing/live_timing_history_tab.dart
+```

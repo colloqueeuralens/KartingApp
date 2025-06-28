@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RKC Race</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 24px;
+            background-color: #2a2a2a;
+            border-bottom: 1px solid #404040;
+        }
+
+        .header h1 {
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 11px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-start { background-color: #22c55e; color: white; }
+        .btn-sim { background-color: #6b7280; color: white; }
+        .btn-stop { background-color: #ef4444; color: white; }
+
+        .status-indicators {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .status-green { background-color: #22c55e; }
+        .status-orange { background-color: #f59e0b; }
+        .status-grey { background-color: #6b7280; }
+
+        /* Navigation - CENTRÉ */
+        .navigation {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: center;
+            gap: 48px;
+            background-color: #1a1a1a;
+            border-bottom: 1px solid #333;
+        }
+
+        .nav-item {
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-item.active {
+            color: #22c55e;
+            background-color: rgba(34, 197, 94, 0.1);
+        }
+
+        .nav-item:not(.active) {
+            color: #9ca3af;
+        }
+
+        .nav-item:hover:not(.active) {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Kart Selection */
+        .kart-section {
+            padding: 16px 24px 20px;
+            background-color: #1a1a1a;
+        }
+
+        .kart-label {
+            font-size: 13px;
+            margin-bottom: 12px;
+            color: #e5e7eb;
+            text-align: center;
+        }
+
+        .kart-grid {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            overflow-x: auto;
+        }
+
+        .kart-card {
+            min-width: 72px;
+            height: 72px;
+            background-color: #374151;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .kart-card.selected {
+            background-color: #22c55e;
+        }
+
+        .kart-card:hover:not(.selected) {
+            background-color: #4b5563;
+        }
+
+        .kart-number {
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 2px;
+        }
+
+        .kart-tours {
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 400;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin: 20px 24px 24px;
+            background-color: #262626;
+            border-radius: 8px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .content-title {
+            color: #22c55e;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Statistics - EN CARDS */
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background-color: rgba(55, 65, 81, 0.2);
+            border-radius: 8px;
+            padding: 16px 20px;
+            flex: 1;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: #9ca3af;
+            font-size: 11px;
+            margin-bottom: 8px;
+            font-weight: 400;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            line-height: 1;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        }
+
+        .stat-best { color: #22c55e; }
+        .stat-normal { color: #ffffff; }
+
+        /* Table */
+        .table-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-header {
+            display: flex;
+            margin-bottom: 0;
+            padding: 12px 20px;
+            background-color: rgba(55, 65, 81, 0.3);
+            border-radius: 6px 6px 0 0;
+        }
+
+        .table-header span {
+            color: #9ca3af;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .table-header .col-info {
+            width: 58px;
+            flex: none;
+            justify-content: center;
+        }
+
+        .table-body {
+            flex: 1;
+            background-color: rgba(31, 41, 55, 0.2);
+            border-radius: 0 0 6px 6px;
+        }
+
+        .table-row {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            transition: background-color 0.15s ease;
+        }
+
+        .table-row:nth-child(even) {
+            background-color: rgba(55, 65, 81, 0.2);
+        }
+
+        .table-row:nth-child(odd) {
+            background-color: rgba(31, 41, 55, 0.1);
+        }
+
+        .table-row:hover {
+            background-color: rgba(75, 85, 99, 0.3) !important;
+        }
+
+        .col-number { 
+            flex: 1;
+            color: #e5e7eb;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .col-time { 
+            flex: 1;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        }
+        
+        .col-hour { 
+            flex: 1;
+            color: #9ca3af;
+            font-size: 13px;
+            font-weight: 400;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        }
+        
+        .col-gap { 
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        }
+
+        .time-best { 
+            color: #22c55e !important; 
+            font-weight: 600;
+        }
+        
+        .gap-positive { color: #ef4444; }
+        .gap-negative { color: #22c55e; }
+        .gap-neutral { color: #9ca3af; }
+
+        .info-icon {
+            width: 18px;
+            height: 18px;
+            background-color: #6b7280;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+            flex: none;
+        }
+
+        .info-icon:hover {
+            background-color: #9ca3af;
+        }
+
+        .info-icon::before {
+            content: 'i';
+            font-size: 10px;
+            font-weight: 600;
+            color: white;
+        }
+
+        /* Resolution indicator */
+        .resolution {
+            position: fixed;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #3b82f6;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        /* Scrollbar styling */
+        .kart-grid::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .kart-grid::-webkit-scrollbar-track {
+            background: #374151;
+            border-radius: 2px;
+        }
+
+        .kart-grid::-webkit-scrollbar-thumb {
+            background: #6b7280;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>RKC RACE</h1>
+        
+        <div class="header-controls">
+            <button class="btn btn-start">START</button>
+            <button class="btn btn-sim">SIM</button>
+            <button class="btn btn-stop">STOP</button>
+        </div>
+
+        <div class="status-indicators">
+            <div class="status-item">
+                <div class="status-dot status-green"></div>
+                <span>API</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-orange"></div>
+                <span>TIM</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-grey"></div>
+                <span>WS</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation - CENTRÉE -->
+    <div class="navigation">
+        <div class="nav-item">
+            <span>📹</span>
+            <span>LIVE</span>
+        </div>
+        <div class="nav-item active">
+            <span>🎯</span>
+            <span>TOURS</span>
+        </div>
+        <div class="nav-item">
+            <span>📊</span>
+            <span>STATS</span>
+        </div>
+    </div>
+
+    <!-- Kart Selection -->
+    <div class="kart-section">
+        <div class="kart-label">Kart :</div>
+        <div class="kart-grid">
+            <div class="kart-card selected" data-kart="2">
+                <div class="kart-number">2</div>
+                <div class="kart-tours">4 tours</div>
+            </div>
+            <div class="kart-card" data-kart="7">
+                <div class="kart-number">7</div>
+                <div class="kart-tours">2 tours</div>
+            </div>
+            <div class="kart-card" data-kart="5">
+                <div class="kart-number">5</div>
+                <div class="kart-tours">5 tours</div>
+            </div>
+            <div class="kart-card" data-kart="1">
+                <div class="kart-number">1</div>
+                <div class="kart-tours">3 tours</div>
+            </div>
+            <div class="kart-card" data-kart="4">
+                <div class="kart-number">4</div>
+                <div class="kart-tours">2 tours</div>
+            </div>
+            <div class="kart-card" data-kart="6">
+                <div class="kart-number">6</div>
+                <div class="kart-tours">2 tours</div>
+            </div>
+            <div class="kart-card" data-kart="3">
+                <div class="kart-number">3</div>
+                <div class="kart-tours">3 tours</div>
+            </div>
+            <div class="kart-card" data-kart="8">
+                <div class="kart-number">8</div>
+                <div class="kart-tours">2 tours</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="content-title">HISTORIQUE DES TOURS - KART 2</div>
+        
+        <!-- Statistics - EN CARDS -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">Meilleur tour</div>
+                <div class="stat-value stat-best">1:25.568</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Temps moyen</div>
+                <div class="stat-value stat-normal">1:27.549</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Dernier tour</div>
+                <div class="stat-value stat-normal">1:28.337</div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            <div class="table-header">
+                <span class="col-number">#</span>
+                <span class="col-time">TEMPS</span>
+                <span class="col-hour">HEURE</span>
+                <span class="col-gap">ÉCART</span>
+            </div>
+
+            <div class="table-body">
+                <div class="table-row">
+                    <span class="col-number">#1</span>
+                    <span class="col-time">1:25.902</span>
+                    <span class="col-hour">08:03:41</span>
+                    <span class="col-gap gap-neutral">-</span>
+                    <div class="info-icon"></div>
+                </div>
+                <div class="table-row">
+                    <span class="col-number">#2</span>
+                    <span class="col-time">1:30.388</span>
+                    <span class="col-hour">08:03:53</span>
+                    <span class="col-gap gap-positive">+4.486</span>
+                    <div class="info-icon"></div>
+                </div>
+                <div class="table-row">
+                    <span class="col-number">#3</span>
+                    <span class="col-time time-best">1:25.568</span>
+                    <span class="col-hour">08:05:11</span>
+                    <span class="col-gap gap-negative">+-4.820</span>
+                    <div class="info-icon"></div>
+                </div>
+                <div class="table-row">
+                    <span class="col-number">#4</span>
+                    <span class="col-time">1:28.337</span>
+                    <span class="col-hour">08:05:41</span>
+                    <span class="col-gap gap-positive">+2.769</span>
+                    <div class="info-icon"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resolution indicator -->
+    <div class="resolution">1440 × 549</div>
+
+    <script>
+        // Kart selection functionality
+        document.querySelectorAll('.kart-card').forEach(card => {
+            card.addEventListener('click', function() {
+                document.querySelectorAll('.kart-card').forEach(c => c.classList.remove('selected'));
+                this.classList.add('selected');
+                
+                const kartNumber = this.dataset.kart;
+                document.querySelector('.content-title').textContent = `HISTORIQUE DES TOURS - KART ${kartNumber}`;
+            });
+        });
+
+        // Navigation functionality
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Button click effects
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.style.transform = 'scale(0.98)';
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html>
