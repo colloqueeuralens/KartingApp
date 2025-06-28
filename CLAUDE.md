@@ -391,6 +391,81 @@ Widget build(BuildContext context) {
 - `lib/widgets/live_timing/live_timing_history_tab.dart`: Complete responsive redesign
 - Multiple service files: Production debug cleanup
 
+### Support Multi-Langue (Français/Italien) - PRODUCTION READY ✅
+**Traduction complète des circuits italiens et internationaux avec parsing intelligent**
+
+**Core Features:**
+- **Traduction Automatique**: Headers italiens → français en temps réel
+- **Support Circuit Italien**: Lonato Race et autres circuits italiens entièrement supportés
+- **Mapping Intelligent**: Reconnaissance automatique des colonnes dans différentes langues
+- **Classement Ordonné**: Tri correct quelque soit la langue source
+- **Compatibilité Étendue**: Supporte français, italien, anglais, allemand, espagnol
+
+**Traductions Italiennes Complètes:**
+```python
+COLUMN_TRANSLATIONS = {
+    # Classement/Position
+    "Cla": "Classement", "Pos": "Classement", "Position": "Classement",
+    
+    # Termes Italiens Spécialisés
+    "Categoria": "Categorie",       # Catégorie de pilote
+    "Ultimo T.": "Dernier T.",      # Dernier temps de tour  
+    "Distacco": "Ecart",            # Écart avec le leader
+    "Giro mig.": "Meilleur T.",     # Meilleur temps de tour
+    "In pista": "En Piste",         # Statut en piste
+    "Pena": "Penalite",             # Pénalité
+    "Pit stop": "Pit Stop",        # Arrêt aux stands
+    "Pilota": "Pilote",             # Pilote
+    "Giri": "Tours",                # Tours
+    "Ritardo": "Ecart",             # Retard
+}
+```
+
+**Architecture Multi-Langue:**
+- **Backend Parser** (`backend/app/analyzers/karting_parser.py`): Dictionnaire complet de traductions
+- **Frontend Robuste** (`lib/widgets/live_timing/live_timing_table.dart`): Tri intelligent multi-colonnes
+- **Reconnaissance Automatique**: Détection de langue et mapping automatique
+- **Cache Refresh**: Reconstruction Docker complète pour appliquer les traductions
+
+**Circuits Supportés:**
+- ✅ **Circuits Français**: Headers français natifs
+- ✅ **Circuits Italiens**: Lonato Race, circuits kart italiens
+- ✅ **Circuits Internationaux**: Support anglais, allemand, espagnol
+- ✅ **Format Mixte**: Colonnes dans différentes langues simultanément
+
+**Technical Implementation:**
+```python
+# Traduction intelligente avec fallback
+def translate_column(self, column_name: str) -> str:
+    return COLUMN_TRANSLATIONS.get(column_name, column_name)
+
+# Tri robuste multi-langue  
+def getPosition(driver):
+    for key in ['Classement', 'Pos', 'Position', 'Clt', 'Pos.', 'Cla']:
+        value = driver[key]?.toString()
+        if value != null && value.isNotEmpty && value != '0':
+            return value
+    return '999'
+```
+
+**Production Features:**
+- ✅ **Reconnaissance Temps Réel**: Traduction instantanée des headers entrants
+- ✅ **Tri Intelligent**: Classement correct quelque soit la langue source
+- ✅ **Données Complètes**: Tours et statistiques fonctionnels sur circuits italiens
+- ✅ **Cache Optimisé**: Reconstruction Docker pour éliminer les caches obsolètes
+- ✅ **Logging Propre**: Plus de messages "Terme inconnu" pour les circuits supportés
+- ✅ **Extensibilité**: Architecture facilement extensible pour nouvelles langues
+
+**Performance Metrics:**
+- **Avant**: Circuit italien non reconnu, classement désordonné, données manquantes
+- **Après**: Support complet, traduction temps réel, données Tours/Stats fonctionnelles
+- **User Experience**: Interface française unifiée quelque soit le circuit source
+
+**Files Updated:**
+- `backend/app/analyzers/karting_parser.py`: Traductions italiennes complètes
+- Docker: Reconstruction complète avec suppression cache Python
+- Documentation: Support multi-langue documenté
+
 ## Firebase Configuration
 
 The app is configured for Firebase project `kartingapp-fef5c` with:
@@ -436,6 +511,7 @@ Firebase options are auto-generated in `lib/firebase_options.dart`.
 - ✅ **Robust error handling and user feedback systems**
 - ✅ **Ultra-fast optimistic drag & drop system (<16ms response, zero duplication)**
 - ✅ **TOURS Tab Responsive Design - PRODUCTION READY**
+- ✅ **Support Multi-Langue (Français/Italien) - PRODUCTION READY**
 - ❌ Test coverage
 
 ## Git Workflow & Repository Management
