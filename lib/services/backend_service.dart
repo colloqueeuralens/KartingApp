@@ -4,16 +4,16 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import '../models/live_timing_models.dart';
+import '../config/app_config.dart';
 import 'live_timing_storage_service.dart';
 
 /// Service pour communiquer avec le backend FastAPI
 class BackendService {
-  static const String _baseUrl =
-      'http://172.25.147.11:8001'; // IP de votre machine
-  static const String _wsBaseUrl = 'ws://172.25.147.11:8001';
+  static String get _baseUrl => AppConfig.backendUrl;
+  static String get _wsBaseUrl => AppConfig.wsUrl;
 
-  static const Duration _connectionTimeout = Duration(seconds: 10);
-  static const Duration _requestTimeout = Duration(seconds: 30);
+  static Duration get _connectionTimeout => AppConfig.connectionTimeout;
+  static Duration get _requestTimeout => AppConfig.requestTimeout;
 
   /// Vérifier la santé du backend
   static Future<bool> checkHealth() async {

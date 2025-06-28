@@ -466,6 +466,110 @@ def getPosition(driver):
 - Docker: Reconstruction complète avec suppression cache Python
 - Documentation: Support multi-langue documenté
 
+### Déploiement VPS Global - PRODUCTION READY ✅
+**Infrastructure professionnelle avec accès mondial et déploiement automatisé**
+
+**Core Features:**
+- **Accès Global**: Application accessible partout dans le monde via HTTPS
+- **Configuration Dynamique**: Détection automatique environnement dev/production
+- **Déploiement Automatisé**: Scripts d'installation et mise à jour VPS
+- **SSL Automatique**: Certificats Let's Encrypt avec renouvellement auto
+- **Sécurité Renforcée**: Firewall, fail2ban, NGINX avec rate limiting
+- **Backups Automatiques**: Sauvegarde quotidienne PostgreSQL + rotation
+
+**Architecture Production:**
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Flutter Web   │    │       VPS        │    │    Firebase     │
+│ (Firebase Host) │────│   NGINX + API    │────│   (Firestore)   │
+│  PWA + APK      │    │  PostgreSQL+Redis│    │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+**Configuration Dynamique:**
+```dart
+// Configuration automatique selon l'environnement
+class AppConfig {
+  static bool get isProduction {
+    return currentUrl.contains('kmrs-racing.com') || 
+           const bool.fromEnvironment('dart.vm.product');
+  }
+  
+  static String get backendUrl {
+    return isProduction ? 'https://api.kmrs-racing.com' : 'http://172.25.147.11:8001';
+  }
+}
+```
+
+**Docker Production Stack:**
+- **NGINX**: Reverse proxy + SSL termination + rate limiting
+- **FastAPI**: Backend API avec variables d'environnement sécurisées
+- **PostgreSQL**: Base de données persistante avec backups
+- **Redis**: Cache sécurisé avec authentification
+- **Certbot**: Gestion automatique certificats SSL
+
+**Scripts de Déploiement:**
+```bash
+# Setup VPS automatique (Ubuntu 22.04)
+./backend/scripts/setup-vps.sh
+
+# Déploiement application
+./backend/scripts/deploy.sh
+
+# Build production (Web + APK)
+./scripts/build-production.sh
+```
+
+**Sécurité Production:**
+- ✅ **SSL/TLS**: Certificats Let's Encrypt avec renouvellement automatique
+- ✅ **Firewall**: UFW configuré (ports 22, 80, 443)
+- ✅ **Fail2ban**: Protection contre attaques brute force
+- ✅ **Rate Limiting**: Protection API et WebSocket
+- ✅ **CORS**: Headers sécurisés pour accès cross-origin
+- ✅ **Secrets**: Variables d'environnement sécurisées
+
+**Monitoring & Backups:**
+- ✅ **Health Checks**: Surveillance automatique services Docker
+- ✅ **Backups Quotidiens**: PostgreSQL avec rotation 30 jours
+- ✅ **Logs Centralisés**: Rotation automatique avec logrotate
+- ✅ **Alerts**: Fail2ban notifications + monitoring système
+
+**VPS Recommandés:**
+| Provider | Config | Prix/mois | Performance |
+|----------|--------|-----------|-------------|
+| **Hetzner** ⭐ | 2 vCPU, 4GB | ~12€ | Excellente |
+| DigitalOcean | 2 vCPU, 4GB | ~25€ | Très bonne |
+| Contabo | 4 vCPU, 8GB | ~8€ | Bonne |
+
+**Workflow de Déploiement:**
+1. **Achat VPS + Domaine** (~23€ setup)
+2. **Configuration DNS** (A records vers VPS)
+3. **Setup automatique VPS** (script 1-click)
+4. **Déploiement application** (Docker Compose)
+5. **SSL automatique** (Let's Encrypt)
+6. **Build & deploy web/mobile** (scripts automatisés)
+
+**Accès Final:**
+- 🌐 **Web App**: `https://votre-domaine.com`
+- 🔌 **API**: `https://api.votre-domaine.com`
+- 📱 **Mobile**: PWA installable + APK Android
+- 🏁 **Circuit**: Plus de configuration réseau nécessaire
+
+**Performance Metrics:**
+- **Avant**: Configuration réseau complexe sur chaque circuit
+- **Après**: Accès immédiat via URL fixe partout dans le monde
+- **User Experience**: "Ouvrir https://votre-domaine.com et c'est parti !"
+
+**Files Created:**
+- `backend/docker-compose.prod.yml`: Configuration production Docker
+- `backend/.env.prod.example`: Template variables d'environnement
+- `backend/nginx/nginx.conf`: Configuration NGINX avec SSL
+- `backend/scripts/setup-vps.sh`: Installation automatique VPS
+- `backend/scripts/deploy.sh`: Déploiement automatisé
+- `lib/config/app_config.dart`: Configuration dynamique Flutter
+- `scripts/build-production.sh`: Build automatisé web + APK
+- `DEPLOYMENT-QUICK-START.md`: Guide déploiement 30 minutes
+
 ## Firebase Configuration
 
 The app is configured for Firebase project `kartingapp-fef5c` with:
@@ -512,6 +616,7 @@ Firebase options are auto-generated in `lib/firebase_options.dart`.
 - ✅ **Ultra-fast optimistic drag & drop system (<16ms response, zero duplication)**
 - ✅ **TOURS Tab Responsive Design - PRODUCTION READY**
 - ✅ **Support Multi-Langue (Français/Italien) - PRODUCTION READY**
+- ✅ **Déploiement VPS Global - PRODUCTION READY**
 - ❌ Test coverage
 
 ## Git Workflow & Repository Management
