@@ -390,7 +390,7 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
     final isSelected = kartId == _selectedKartId;
     
     final cardHeight = isCompact ? 60.0 : 72.0;
-    final fontSize = isCompact ? 12.0 : 14.0; // Réduire légèrement pour le responsive
+    final fontSize = isCompact ? 10.0 : 11.0; // Réduire légèrement pour le responsive
     final toursSize = isCompact ? 8.0 : 9.0;
     
     return Container(

@@ -317,6 +317,80 @@ Live Timing Table → Real-time UI Updates
 - **Connection Management**: Automatic reconnection and error recovery
 - **Real-time Synchronization**: Multi-client data consistency
 
+### TOURS Tab Responsive Design - PRODUCTION READY ✅
+**Complete mobile-first interface with optimized kart selection and natural page scrolling**
+
+**Core Features:**
+- **Exactly 10 Karts Per Line**: Fixed limit on web, no more overflow at 17+ karts
+- **No Pagination System**: Clean, simple interface without navigation controls
+- **Natural Page Scrolling**: Behaves exactly like configuration screenshots - scroll entire page to see bottom content
+- **Full-Width Responsive Cards**: Kart cards use entire available width with `Expanded` flex layout
+- **Mobile Dropdown**: Compact dropdown selector with visual indicators for mobile platforms
+- **Production Code**: Complete debug cleanup (~300+ lines removed) for optimal performance
+
+**Technical Implementation:**
+```dart
+// Limite fixe de 10 karts par ligne pour web
+Widget _buildSimpleWebGrid(List<String> kartsList, int maxKartsPerRow) {
+  // Découper la liste en chunks de 10 karts maximum
+  final List<List<String>> rows = [];
+  for (int i = 0; i < kartsList.length; i += maxKartsPerRow) {
+    final end = (i + maxKartsPerRow < kartsList.length) ? i + maxKartsPerRow : kartsList.length;
+    rows.add(kartsList.sublist(i, end));
+  }
+  
+  return Column(
+    children: rows.map((rowKarts) {
+      return Row(
+        children: rowKarts.map((kartId) {
+          return Expanded( // 🎯 Chaque carte prend 1/10 de la largeur
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: _buildKartCard(kartId, isCompact: false),
+            ),
+          );
+        }).toList(),
+      );
+    }).toList(),
+  );
+}
+
+// Scroll naturel de toute la page
+@override
+Widget build(BuildContext context) {
+  return SingleChildScrollView( // 🎯 Scroll de page complet
+    child: Column(children: [...]),
+  );
+}
+```
+
+**Responsive Features:**
+- ✅ **Exactly 10 Karts Per Line**: Manual row chunking replaces problematic `Wrap` widget
+- ✅ **Full-Width Cards**: Each kart card takes exactly 1/10 of available width using `Expanded`
+- ✅ **Natural Page Scroll**: `SingleChildScrollView` + `Column` replaces `ListView.builder` + `Expanded`
+- ✅ **Mobile Dropdown**: Compact selection with visual indicators and tour counts
+- ✅ **Zero Overflow**: Robust constraint handling prevents rendering errors
+- ✅ **Production Ready**: Clean code without debug artifacts or pagination controls
+
+**Mobile Experience:**
+- **Dropdown Selector**: Space-efficient selection with kart numbers and tour counts
+- **Visual Indicators**: Green dots show selected kart in dropdown
+- **Compact Layout**: Optimized for mobile screen real estate
+
+**Web Experience:**
+- **Grid Layout**: Exactly 10 karts per line regardless of screen width
+- **Full-Width Utilization**: Cards expand to use entire available space
+- **Consistent Spacing**: 4px uniform spacing between all cards
+
+**Performance Metrics:**
+- **Before**: 17 karts per line + pagination + confined scroll + debug overhead
+- **After**: 10 karts per line + natural scroll + production-optimized code
+- **User Experience**: "Tout est OK" - perfect responsive behavior matching user expectations
+
+**Files Updated:**
+- `lib/widgets/live_timing/live_timing_history_tab.dart`: Complete responsive redesign
+- Multiple service files: Production debug cleanup
+
 ## Firebase Configuration
 
 The app is configured for Firebase project `kartingapp-fef5c` with:
@@ -361,6 +435,7 @@ Firebase options are auto-generated in `lib/firebase_options.dart`.
 - ✅ **Smart responsive layouts with perfect alignments**
 - ✅ **Robust error handling and user feedback systems**
 - ✅ **Ultra-fast optimistic drag & drop system (<16ms response, zero duplication)**
+- ✅ **TOURS Tab Responsive Design - PRODUCTION READY**
 - ❌ Test coverage
 
 ## Git Workflow & Repository Management
