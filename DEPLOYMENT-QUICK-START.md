@@ -43,9 +43,9 @@ curl -fsSL https://raw.githubusercontent.com/colloqueeuralens/KartingApp/main/ba
 chmod +x setup-vps.sh
 
 # 3. Configurer et lancer (remplacer par votre domaine)
-export DOMAIN="votre-domaine.com"
-export API_DOMAIN="api.votre-domaine.com"  
-export SSL_EMAIL="votre-email@example.com"
+export DOMAIN="kmrs-racing.eu"
+export API_DOMAIN="api.kmrs-racing.eu"  
+export SSL_EMAIL="samuellibeert12@gmail.com"
 ./setup-vps.sh
 
 # 4. Passer à l'utilisateur karting
