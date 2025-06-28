@@ -34,7 +34,5 @@
 - **Sélecteur :** Cards rectangulaires horizontales avec numéros
 
 ## Récupération
-Pour revenir à l'ancien design :
-```bash
-cp lib/widgets/live_timing/live_timing_history_tab_backup.dart lib/widgets/live_timing/live_timing_history_tab.dart
-```
+⚠️ **BACKUP SUPPRIMÉ** - Le design tableau a été supprimé car non utilisé.
+L'interface actuelle avec cards glassmorphism est le design final et préféré.
