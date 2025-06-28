@@ -231,16 +231,215 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildKartSelector(),
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _buildLapsTable(),
-        ),
-      ],
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _buildKartSelector(),
+          if (_isLoading)
+            const SizedBox(
+              height: 200,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            _buildLapsTable(),
+        ],
+      ),
     );
+  }
+
+  /// Sélecteur de kart responsive avec solutions adaptées par plateforme
+  Widget _buildResponsiveKartSelector() {
+    final kartsList = _kartsHistory.keys.toList();
+    final kartsCount = kartsList.length;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final isMobile = screenWidth < 600;
+        
+        // 📱 MOBILE: Dropdown compact pour espace restreint
+        if (isMobile) {
+          return _buildMobileDropdownSelector(kartsList);
+        } 
+        // 🖥️ WEB: Grid responsive avec pagination si nécessaire
+        else {
+          return _buildWebGridSelector(kartsList, screenWidth);
+        }
+      },
+    );
+  }
+
+  /// Dropdown compact pour mobile
+  Widget _buildMobileDropdownSelector(List<String> kartsList) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF374151),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF6B7280)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedKartId,
+          hint: const Text(
+            'Sélectionner un kart',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          dropdownColor: const Color(0xFF374151),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white70),
+          isExpanded: true,
+          items: kartsList.map((kartId) {
+            final history = _kartsHistory[kartId]!;
+            final pilotName = _getPilotName(kartId);
+            final isSelected = kartId == _selectedKartId;
+            
+            return DropdownMenuItem<String>(
+              value: kartId,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    // Indicateur de sélection
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF22C55E) : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Nom du pilote
+                    Expanded(
+                      child: Text(
+                        pilotName,
+                        style: TextStyle(
+                          color: isSelected ? const Color(0xFF22C55E) : Colors.white,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Nombre de tours
+                    Text(
+                      '${history.totalLaps} tours',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (String? newKartId) {
+            if (newKartId != null) {
+              _loadKartLaps(newKartId);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Grid responsive pour web sans pagination
+  Widget _buildWebGridSelector(List<String> kartsList, double screenWidth) {
+    // Utiliser la grille simple sans pagination
+    return _buildSimpleWebGrid(kartsList, 10);
+  }
+
+  /// Grille simple pour web avec limite de 10 karts par ligne
+  Widget _buildSimpleWebGrid(List<String> kartsList, int maxKartsPerRow) {
+    if (kartsList.isEmpty) return const SizedBox.shrink();
+    
+    // Découper la liste en chunks de 10 karts maximum
+    final List<List<String>> rows = [];
+    for (int i = 0; i < kartsList.length; i += maxKartsPerRow) {
+      final end = (i + maxKartsPerRow < kartsList.length) ? i + maxKartsPerRow : kartsList.length;
+      rows.add(kartsList.sublist(i, end));
+    }
+    
+    return Column(
+      children: rows.map((rowKarts) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: rowKarts.map((kartId) {
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: _buildKartCard(kartId, isCompact: false),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+
+  /// Carte de kart réutilisable
+  Widget _buildKartCard(String kartId, {required bool isCompact}) {
+    final history = _kartsHistory[kartId]!;
+    final pilotName = _getPilotName(kartId);
+    final isSelected = kartId == _selectedKartId;
+    
+    final cardHeight = isCompact ? 60.0 : 72.0;
+    final fontSize = isCompact ? 12.0 : 14.0; // Réduire légèrement pour le responsive
+    final toursSize = isCompact ? 8.0 : 9.0;
+    
+    return Container(
+      height: cardHeight,
+      child: GestureDetector(
+        onTap: () => _loadKartLaps(kartId),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF22C55E) : const Color(0xFF374151),
+            borderRadius: BorderRadius.circular(6),
+            border: isSelected 
+                ? Border.all(color: const Color(0xFF22C55E), width: 2)
+                : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                pilotName,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${history.totalLaps} tours',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: toursSize,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  /// Limite fixe de 10 karts par ligne pour web
+  int _getMaxKartsPerRow(double screenWidth) {
+    return 10; // Limite fixe à 10 karts par ligne
   }
 
   Widget _buildKartSelector() {
@@ -269,71 +468,7 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final kartsList = _kartsHistory.keys.toList();
-              final kartsCount = kartsList.length;
-              final totalGap = (kartsCount - 1) * 12.0;
-              final availableWidth = constraints.maxWidth - totalGap;
-              final cardWidth = (availableWidth / kartsCount).clamp(60.0, 120.0);
-              
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: kartsList.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final kartId = entry.value;
-                  final isSelected = kartId == _selectedKartId;
-                  final history = _kartsHistory[kartId]!;
-                  final pilotName = _getPilotName(kartId);
-                  
-                  return Container(
-                    width: cardWidth,
-                    height: 72,
-                    margin: EdgeInsets.only(
-                      right: index < kartsCount - 1 ? 12 : 0,
-                    ),
-                    child: GestureDetector(
-                      onTap: () => _loadKartLaps(kartId),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xFF22C55E)
-                              : const Color(0xFF374151),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              pilotName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                height: 1,
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${history.totalLaps} tours',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-          ),
+          _buildResponsiveKartSelector(),
         ],
       ),
     );
@@ -342,33 +477,32 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
   Widget _buildLapsTable() {
     // Différencier entre "aucun kart sélectionné" et "kart sélectionné mais pas de tours"
     if (_selectedKartId == null) {
-      return Expanded(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF262626),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.timer_off,
-                  size: 64,
-                  color: Colors.white54,
+      return Container(
+        height: 200,
+        margin: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF262626),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.timer_off,
+                size: 64,
+                color: Colors.white54,
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Sélectionnez un kart',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white70,
                 ),
-                SizedBox(height: 16),
-                Text(
-                  'Sélectionnez un kart',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -376,64 +510,61 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
     
     // Si un kart est sélectionné mais pas de tours
     if (_laps.isEmpty && !_isLoading) {
-      return Expanded(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF262626),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.history,
-                  size: 64,
-                  color: Colors.white54,
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Aucun tour enregistré',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white70,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Ce kart n\'a pas encore effectué de tours',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white54,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Expanded(
-      child: Container(
+      return Container(
+        height: 200,
         margin: const EdgeInsets.fromLTRB(24, 20, 24, 24),
         decoration: BoxDecoration(
           color: const Color(0xFF262626),
           borderRadius: BorderRadius.circular(8),
         ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildContentTitle(),
-            const SizedBox(height: 24),
-            _buildStatsRow(),
-            const SizedBox(height: 32),
-            _buildTableContainer(),
-          ],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.history,
+                size: 64,
+                color: Colors.white54,
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Aucun tour enregistré',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white70,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Ce kart n\'a pas encore effectué de tours',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white54,
+                ),
+              ),
+            ],
+          ),
         ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF262626),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildContentTitle(),
+          const SizedBox(height: 24),
+          _buildStatsRow(),
+          const SizedBox(height: 32),
+          _buildTableContainer(),
+        ],
       ),
     );
   }
@@ -523,15 +654,12 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
   }
 
   Widget _buildTableContainer() {
-    return Expanded(
-      child: Column(
-        children: [
-          _buildTableHeader(),
-          Expanded(
-            child: _buildTableBody(),
-          ),
-        ],
-      ),
+    // Toujours utiliser un layout naturel pour permettre le scroll de page
+    return Column(
+      children: [
+        _buildTableHeader(),
+        _buildTableBody(),
+      ],
     );
   }
   
@@ -601,12 +729,12 @@ class _LiveTimingHistoryTabState extends State<LiveTimingHistoryTab> {
           bottomRight: Radius.circular(6),
         ),
       ),
-      child: ListView.builder(
-        itemCount: _laps.length,
-        itemBuilder: (context, index) {
-          final lap = _laps[index];
+      child: Column(
+        children: _laps.asMap().entries.map((entry) {
+          final index = entry.key;
+          final lap = entry.value;
           return _buildTableRow(lap, index);
-        },
+        }).toList(),
       ),
     );
   }

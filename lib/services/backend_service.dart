@@ -446,28 +446,64 @@ class LiveTimingWebSocketService {
           }
         }
 
-        // Vérifier si on a trouvé un temps de tour valide
-        if (currentLastLap != null && 
-            currentLastLap.isNotEmpty && 
-            currentLastLap != '--:--' && 
-            currentLastLap != '0:00.000' &&
-            !currentLastLap.contains('--') &&
-            currentLastLap != 'null') {
-          
+        // Vérifier si c'est une valeur valide de temps de tour (utiliser _isPlaceholder)
+        if (!_isPlaceholder(currentLastLap)) {
           // Comparer avec le dernier temps stocké
           final previousLap = _lastLapTimes[kartId];
           
-          if (previousLap != currentLastLap) {
-            // Nouveau tour détecté !
-            _lapCounters[kartId] = (_lapCounters[kartId] ?? 0) + 1;
-            _lastLapTimes[kartId] = currentLastLap;
+          
+          // Cas spécial: Premier tour de ce kart (previousLap = null)
+          if (previousLap == null) {
+            // Vérifier qu'on n'a pas déjà un tour stocké pour ce kart
+            final currentSession = LiveTimingStorageService.currentSession;
+            if (currentSession != null) {
+              final sessionData = currentSession.kartsHistory[kartId];
+              final prevTotalLaps = sessionData?.totalLaps ?? 0;
+              
+              // Ne stocker que si c'est vraiment le premier tour (pas déjà en base)
+              if (prevTotalLaps == 0) {
+                _lapCounters[kartId] = 1;
+                _lastLapTimes[kartId] = currentLastLap!;
+                _storeLiveLap(kartId, currentLastLap!, kartData);
+              } else {
+                // Déjà des tours stockés, juste mettre à jour la référence locale
+                _lastLapTimes[kartId] = currentLastLap!;
+              }
+            }
+          }
+          // Logique robuste pour les tours suivants  
+          else if (!_isPlaceholder(previousLap) && previousLap != currentLastLap) {
+            
+            // UTILISER _lapCounters COMME SOURCE DE VERITE (pas le cache distant)
+            final currentLapNumber = _lapCounters[kartId] ?? 0;
+            final newLapNumber = currentLapNumber + 1;
+            
+            // Stocker le nouveau tour (se fier au compteur local)
+            _lapCounters[kartId] = newLapNumber;
+            _lastLapTimes[kartId] = currentLastLap!; // Non-null car vérifié par _isPlaceholder
             
             // Créer et stocker le nouveau tour
-            _storeLiveLap(kartId, currentLastLap, kartData);
+            _storeLiveLap(kartId, currentLastLap!, kartData);
+          } 
+          // Récupération après des placeholders
+          else if (_isPlaceholder(previousLap) && !_isPlaceholder(currentLastLap)) {
+            // Tour valide après des placeholders - mettre à jour sans stocker
+            _lastLapTimes[kartId] = currentLastLap!; // Non-null car vérifié par _isPlaceholder
+          }
+          else {
           }
         }
       }
     });
+  }
+
+  /// Vérifier si une valeur est un placeholder (valeur temporaire)
+  bool _isPlaceholder(String? value) {
+    if (value == null || value.isEmpty) return true;
+    return value == '--:--' || 
+           value == '0:00.000' || 
+           value == 'null' ||
+           value.contains('--');
   }
 
   /// Stocker un nouveau tour détecté
@@ -475,20 +511,28 @@ class LiveTimingWebSocketService {
     try {
       final lapNumber = _lapCounters[kartId] ?? 1;
       
-      // Créer les données de tour
+      // Récupérer le sessionId actuel du service de stockage
+      final currentSession = LiveTimingStorageService.currentSession;
+      if (currentSession == null) {
+        return;
+      }
+      
+      
+      // Créer les données de tour avec sessionId
       final lap = LiveLapData.create(
+        sessionId: currentSession.sessionId,
         kartId: kartId,
         lapNumber: lapNumber,
         lapTime: lapTime,
         timingData: kartData,
       );
       
+      
       // Stocker via le service de stockage
       await LiveTimingStorageService.storeLap(lap);
       
     } catch (e) {
       // En cas d'erreur, ne pas bloquer le flux WebSocket
-      // On pourrait logger l'erreur ou la signaler d'une autre façon
     }
   }
 

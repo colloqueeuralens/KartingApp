@@ -15,7 +15,7 @@ COLUMN_TRANSLATIONS = {
     # Classement/Position
     "Clt": "Classement", "Pos": "Classement", "Position": "Classement", 
     "Rk": "Classement", "Rang": "Classement", "Rank": "Classement",
-    "Classement": "Classement","Pos.": "Classement",
+    "Classement": "Classement","Pos.": "Classement", "Cla": "Classement",
     
     # Pilote/Driver  
     "Pilote": "Pilote", "Driver": "Pilote", "Fahrer": "Pilote", 
@@ -26,14 +26,14 @@ COLUMN_TRANSLATIONS = {
     
     # Temps
     "Dernier T.": "Dernier T.", "Last": "Dernier T.", "Letzte": "Dernier T.",
-    "Ultimo": "Dernier T.", "Last Time": "Dernier T.",
+    "Ultimo": "Dernier T.", "Last Time": "Dernier T.","Ultimo T.": "Dernier T.",
     
     "Meilleur T.": "Meilleur T.", "Best": "Meilleur T.", "Beste": "Meilleur T.", 
-    "Migliore": "Meilleur T.", "Best Time": "Meilleur T.",
+    "Migliore": "Meilleur T.", "Best Time": "Meilleur T.","Giro mig.": "Meilleur T.",
     
     # Écart
     "Ecart": "Ecart", "Gap": "Ecart", "Abstand": "Ecart", 
-    "Ritardo": "Ecart", "Diferencia": "Ecart",
+    "Ritardo": "Ecart", "Diferencia": "Ecart", "Distacco": "Ecart",
     
     # Tours
     "Tours": "Tours", "Laps": "Tours", "Runden": "Tours", 
@@ -52,7 +52,7 @@ COLUMN_TRANSLATIONS = {
     "Lap": "Tours", "Lap Time": "Dernier T.", "Tour": "Tours",
     
     # Autres termes possibles
-    "Name": "Pilote", "Nom": "Pilote", "Team": "Equipe", "Équipe": "Equipe"
+    "Name": "Pilote", "Nom": "Pilote", "Team": "Equipe", "Équipe": "Equipe","Categoria": "Categorie","In pista": "En Piste",
 }
 
 

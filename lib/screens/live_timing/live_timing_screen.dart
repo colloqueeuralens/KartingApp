@@ -10,11 +10,10 @@ import '../../widgets/live_timing/debug_sections.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
 import '../../services/backend_service.dart';
-import '../../services/live_timing_storage_service.dart';
-import '../../services/live_timing_simulator.dart';
+import '../../services/global_live_timing_service.dart';
 import '../../theme/racing_theme.dart';
 
-/// Page LiveTiming avec design racing timing board
+/// Page LiveTiming avec design racing timing board - intégrée au service global
 class LiveTimingScreen extends StatefulWidget {
   final VoidCallback? onBackToConfig;
 
@@ -25,25 +24,13 @@ class LiveTimingScreen extends StatefulWidget {
 }
 
 class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProviderStateMixin {
-  final LiveTimingWebSocketService _wsService = LiveTimingWebSocketService();
+  final GlobalLiveTimingService _globalService = GlobalLiveTimingService.instance;
   bool _backendHealthy = false;
-  bool _timingActive = false;
-  bool _wsConnected = false;
-  Map<String, dynamic>? _lastTimingData;
-  Map<String, dynamic>? _circuitStatus;
-  String? _errorMessage;
-  String? _lastRawMessage;
-  Map<String, Map<String, dynamic>> _driversData = {};
   String? _currentCircuitName;
-  int _connectionAttempts = 0;
   
   // Onglets
   late TabController _tabController;
   int _currentTabIndex = 0;
-  
-  // Simulateur pour tests
-  final LiveTimingSimulator _simulator = LiveTimingSimulator();
-  bool _isSimulating = false;
 
   @override
   void initState() {
@@ -55,27 +42,24 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
       });
     });
     
-    // Configurer le simulateur
-    _simulator.onDataUpdate = (data) {
-      if (mounted && _isSimulating) {
-        setState(() {
-          _driversData = Map<String, Map<String, dynamic>>.from(data);
-          _lastTimingData = data;
-        });
-        
-        // Traiter les données simulées via le WebSocket service pour la détection de tours
-        _wsService.processSimulatedData(data);
-      }
-    };
+    // Écouter les changements du service global
+    _globalService.addListener(_onGlobalServiceChanged);
     
     _checkBackendHealth();
+  }
+
+  void _onGlobalServiceChanged() {
+    if (mounted) {
+      setState(() {
+        // Rebuild automatique quand le service global change
+      });
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _simulator.stopSimulation();
-    _wsService.dispose();
+    _globalService.removeListener(_onGlobalServiceChanged);
     super.dispose();
   }
 
@@ -84,237 +68,31 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
     if (mounted) {
       setState(() {
         _backendHealthy = healthy;
-        if (!healthy) {
-          _errorMessage = 'Backend non disponible';
-        }
       });
     }
   }
 
-  Future<void> _connectToTiming(String circuitId) async {
-    if (!_backendHealthy) {
-      await _checkBackendHealth();
-      if (!_backendHealthy) return;
-    }
-
-    _connectionAttempts = 0;
-    await _attemptWebSocketConnection(circuitId);
-  }
-
-  Future<void> _attemptWebSocketConnection(String circuitId) async {
-    const maxAttempts = 3;
-    
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      _connectionAttempts = attempt;
-      
-      try {
-        // Obtenir le statut du circuit
-        final status = await BackendService.getCircuitStatus(circuitId);
-        if (mounted) {
-          setState(() {
-            _circuitStatus = status;
-          });
-        }
-
-        // Se connecter au WebSocket avec timeout
-        final connected = await _wsService.connect(circuitId).timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            return false;
-          },
-        );
-
-        if (connected && mounted) {
-          setState(() {
-            _wsConnected = true;
-            _errorMessage = null;
-          });
-          
-          // Écouter les données en temps réel
-          _wsService.stream?.listen((data) {
-            if (mounted) {
-              // Traitement normal des données
-              setState(() {
-                _lastTimingData = data;
-                _lastRawMessage = data.toString();
-                _driversData = _wsService.allKartsData;
-                _wsConnected = _wsService.isConnected;
-              });
-            }
-          }, onError: (error) {
-            if (mounted) {
-              setState(() {
-                _wsConnected = false;
-                _errorMessage = 'Connexion WebSocket perdue: $error';
-              });
-            }
-          });
-          
-          return; // Succès, sortir de la boucle
-        }
-
-        // Échec de connexion, attendre avant retry
-        if (attempt < maxAttempts) {
-          await Future.delayed(const Duration(seconds: 2));
-        }
-        
-      } catch (e) {
-        if (attempt == maxAttempts && mounted) {
-          setState(() {
-            _wsConnected = false;
-            _errorMessage = 'Impossible de se connecter au WebSocket après $maxAttempts tentatives';
-          });
-        }
-      }
-    }
-  }
-
+  /// Démarrer le Live Timing réel via le service global
   Future<void> _startTiming(String circuitId) async {
-    setState(() {
-      _errorMessage = null;
-      // NETTOYER COMPLÈTEMENT les données UI au démarrage d'une nouvelle session
-      _driversData.clear();
-      _lastTimingData = null;
-      _lastRawMessage = null;
-    });
-
-    // Démarrer une nouvelle session de stockage des tours AVANT tout le reste
-    try {
-      await LiveTimingStorageService.startSession(circuitId);
-    } catch (e) {
+    final success = await _globalService.startRealTiming(circuitId);
+    if (!success && mounted) {
       setState(() {
-        _errorMessage = 'Erreur lors du démarrage de la session de stockage: $e';
-      });
-      return;
-    }
-
-    // WebSocket-first approach - Connect to WebSocket first
-    await _connectToTiming(circuitId);
-    
-    if (!_wsConnected) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Impossible de se connecter au WebSocket avant le timing';
-          _timingActive = false;
-        });
-      }
-      return;
-    }
-
-    // Stabilization delay before starting backend
-    await Future.delayed(const Duration(seconds: 2));
-    
-    // Start timing backend
-    final timingSuccess = await BackendService.startTiming(circuitId);
-    if (!timingSuccess) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Impossible de démarrer le timing backend';
-          _timingActive = false;
-        });
-      }
-      return;
-    }
-
-    // Activer la détection automatique des tours
-    _wsService.enableLapDetection(true);
-
-    // Mark timing as active
-    if (mounted) {
-      setState(() {
-        _timingActive = true;
-        _errorMessage = null;
+        // L'erreur est gérée dans le service global
       });
     }
   }
 
-  Future<void> _stopTiming(String circuitId) async {
-    // Désactiver la détection des tours
-    _wsService.enableLapDetection(false);
-    
-    // Arrêter la session de stockage
-    try {
-      await LiveTimingStorageService.stopSession();
-    } catch (e) {
-      print('Erreur lors de l\'arrêt de la session de stockage: $e');
-    }
-    
-    // Stop timing backend
-    final success = await BackendService.stopTiming(circuitId);
-    
-    // Disconnect WebSocket
-    await _wsService.disconnect();
-    
-    if (success && mounted) {
-      setState(() {
-        _timingActive = false;
-        _wsConnected = false;
-        _lastTimingData = null;
-        _driversData.clear();
-        _errorMessage = null;
-      });
-    } else if (mounted) {
-      setState(() {
-        _errorMessage = 'Impossible d\'arrêter le timing backend';
-      });
-    }
+  /// Arrêter le Live Timing via le service global
+  Future<void> _stopTiming() async {
+    await _globalService.stopTiming();
   }
 
-  /// Démarrer la simulation de données Live Timing
+  /// Démarrer la simulation via le service global
   Future<void> _startSimulation(String circuitId) async {
-    setState(() {
-      _errorMessage = null;
-      // NETTOYER COMPLÈTEMENT les données UI au démarrage d'une nouvelle simulation
-      _driversData.clear();
-      _lastTimingData = null;
-      _lastRawMessage = null;
-    });
-
-    try {
-      // Démarrer une session de stockage pour la simulation AVANT tout le reste
-      await LiveTimingStorageService.startSession(circuitId);
-      
-      // Activer la détection des tours pour la simulation
-      _wsService.enableLapDetection(true);
-      
-      // Démarrer la simulation
-      _simulator.startSimulation();
-      
+    final success = await _globalService.startSimulation(circuitId);
+    if (!success && mounted) {
       setState(() {
-        _isSimulating = true;
-        _timingActive = true;
-        _wsConnected = true; // Simuler une connexion
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Erreur lors du démarrage de la simulation: $e';
-      });
-    }
-  }
-
-  /// Arrêter la simulation
-  Future<void> _stopSimulation() async {
-    try {
-      // Arrêter le simulateur
-      _simulator.stopSimulation();
-      
-      // Désactiver la détection des tours
-      _wsService.enableLapDetection(false);
-      
-      // Arrêter la session de stockage
-      await LiveTimingStorageService.stopSession();
-      
-      setState(() {
-        _isSimulating = false;
-        _timingActive = false;
-        _wsConnected = false;
-        _driversData.clear();
-        _lastTimingData = null;
-        _errorMessage = null;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Erreur lors de l\'arrêt de la simulation: $e';
+        // L'erreur est gérée dans le service global
       });
     }
   }
@@ -333,7 +111,7 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
 
           return Padding(
             padding: EdgeInsets.symmetric(
-              horizontal: 20, // → 20px à gauche et à droite
+              horizontal: 20,
               vertical: isWideScreen ? 16 : 12,
             ),
             child: isWideScreen
@@ -434,7 +212,7 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
         _buildCompactButton(
           icon: Icons.play_arrow,
           label: 'START',
-          isEnabled: _backendHealthy && !_timingActive && !_isSimulating,
+          isEnabled: _backendHealthy && !_globalService.isActive,
           color: RacingTheme.excellent,
           onPressed: () => _startTiming(circuitId),
         ),
@@ -443,7 +221,7 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
         _buildCompactButton(
           icon: Icons.science,
           label: 'SIM',
-          isEnabled: !_timingActive && !_isSimulating,
+          isEnabled: !_globalService.isActive,
           color: RacingTheme.racingBlue,
           onPressed: () => _startSimulation(circuitId),
         ),
@@ -452,9 +230,9 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
         _buildCompactButton(
           icon: Icons.stop,
           label: 'STOP',
-          isEnabled: _timingActive || _isSimulating,
+          isEnabled: _globalService.isActive,
           color: RacingTheme.bad,
-          onPressed: () => _isSimulating ? _stopSimulation() : _stopTiming(circuitId),
+          onPressed: () => _stopTiming(),
         ),
       ],
     );
@@ -470,13 +248,13 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
         ),
         const SizedBox(width: 8),
         _buildStatusLED(
-          isActive: _timingActive,
+          isActive: _globalService.isActive,
           label: 'TIM',
           activeColor: RacingTheme.racingGold,
         ),
         const SizedBox(width: 8),
         _buildStatusLED(
-          isActive: _wsConnected && _wsService.isConnected,
+          isActive: _globalService.isConnected,
           label: 'WS',
           activeColor: RacingTheme.racingBlue,
         ),
@@ -605,7 +383,8 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
   }
 
   Widget _buildErrorMessage() {
-    if (_errorMessage == null) return const SizedBox.shrink();
+    final errorMessage = _globalService.errorMessage;
+    if (errorMessage == null) return const SizedBox.shrink();
 
     return Card(
       margin: const EdgeInsets.all(8),
@@ -618,12 +397,14 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _errorMessage!,
+                errorMessage,
                 style: const TextStyle(color: Colors.red),
               ),
             ),
             IconButton(
-              onPressed: () => setState(() => _errorMessage = null),
+              onPressed: () {
+                // Les erreurs du service global se nettoient automatiquement
+              },
               icon: const Icon(Icons.close, color: Colors.red),
             ),
           ],
@@ -686,11 +467,11 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
           _buildLiveTab(),
           // Onglet TOURS - Historique des tours
           LiveTimingHistoryTab(
-            isConnected: _wsConnected && _wsService.isConnected,
+            isConnected: _globalService.isConnected,
           ),
           // Onglet STATS - Statistiques et export
           LiveTimingStatsTab(
-            isConnected: _wsConnected && _wsService.isConnected,
+            isConnected: _globalService.isConnected,
           ),
         ],
       ),
@@ -703,15 +484,15 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProvider
         children: [
           // Tableau de timing principal
           LiveTimingTable(
-            driversData: _driversData,
-            isConnected: _wsConnected && _wsService.isConnected,
-            columnOrder: _wsService.columnOrder,
+            driversData: _globalService.driversData,
+            isConnected: _globalService.isConnected,
+            columnOrder: _globalService.columnOrder, // ⭐ Ordre correct des colonnes
           ),
           
           // Sections de debug pliables
           DebugSections(
-            lastTimingData: _lastTimingData,
-            lastRawMessage: _lastRawMessage,
+            lastTimingData: _globalService.driversData,
+            lastRawMessage: _globalService.driversData.toString(),
           ),
           
           // Espace en bas pour le scroll

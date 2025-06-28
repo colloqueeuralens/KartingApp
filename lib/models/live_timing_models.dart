@@ -19,15 +19,16 @@ class LiveLapData {
   });
 
   factory LiveLapData.create({
+    required String sessionId,
     required String kartId,
     required int lapNumber,
     required String lapTime,
     required Map<String, dynamic> timingData,
   }) {
     return LiveLapData(
-      // ID UNIQUE et STABLE: même kartId + même lapNumber = même ID (pas de timestamp)
-      // Cela permet à Firebase de détecter automatiquement les doublons
-      id: '${kartId}_lap_${lapNumber}',
+      // ID UNIQUE et STABLE avec session: évite conflits entre sessions
+      // Format: sessionId_kartId_lap_001 (padding pour tri correct)
+      id: '${sessionId}_${kartId}_lap_${lapNumber.toString().padLeft(3, '0')}',
       kartId: kartId,
       lapNumber: lapNumber,
       lapTime: lapTime,
@@ -249,6 +250,23 @@ class LiveTimingSession {
       raceStart: raceStart,
       kartsHistory: updatedHistory,
       isActive: isActive,
+    );
+  }
+
+  /// Créer une copie avec modifications
+  LiveTimingSession copyWith({
+    String? sessionId,
+    String? circuitId,
+    DateTime? raceStart,
+    Map<String, LiveTimingHistory>? kartsHistory,
+    bool? isActive,
+  }) {
+    return LiveTimingSession(
+      sessionId: sessionId ?? this.sessionId,
+      circuitId: circuitId ?? this.circuitId,
+      raceStart: raceStart ?? this.raceStart,
+      kartsHistory: kartsHistory ?? this.kartsHistory,
+      isActive: isActive ?? this.isActive,
     );
   }
 

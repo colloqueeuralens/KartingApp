@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/live_timing_models.dart';
+import 'debouncing_service.dart';
+import 'pagination_service.dart';
 
 /// Service pour stocker et gérer l'historique des tours Live Timing
 class LiveTimingStorageService {
@@ -10,6 +12,9 @@ class LiveTimingStorageService {
   // Cache en mémoire pour performance
   static LiveTimingSession? _currentSession;
   static final Map<String, LiveTimingHistory> _localCache = {};
+  
+  // Services de pagination par kart
+  static final Map<String, LapsPaginationService> _lapsPaginators = {};
   
   // Stream controller pour notifier les changements
   static final StreamController<LiveTimingSession> _sessionController = 
@@ -74,6 +79,7 @@ class LiveTimingStorageService {
       throw Exception('Aucune session active pour stocker le tour');
     }
 
+
     try {
       // PROTECTION CONTRE LES DOUBLONS: Vérifier si le tour existe déjà en base
       final existingLapDoc = await _firestore
@@ -88,7 +94,6 @@ class LiveTimingStorageService {
         final existingData = existingLapDoc.data()!;
         final existingLapTime = existingData['lapTime'] as String?;
         if (existingLapTime == lap.lapTime) {
-          // Tour identique déjà stocké, ignorer
           return;
         }
       }
@@ -98,10 +103,13 @@ class LiveTimingStorageService {
       
       // Mettre à jour le cache local (déduplication automatique)
       if (_localCache.containsKey(lap.kartId)) {
+        final oldCount = _localCache[lap.kartId]!.totalLaps;
         _localCache[lap.kartId] = _localCache[lap.kartId]!.addLap(lap);
+        final newCount = _localCache[lap.kartId]!.totalLaps;
       } else {
         _localCache[lap.kartId] = LiveTimingHistory.create(lap.kartId).addLap(lap);
       }
+      
       
       // Stocker le tour individuel dans Firebase (l'ID unique empêche les doublons)
       await _firestore
@@ -157,21 +165,89 @@ class LiveTimingStorageService {
     }
   }
 
-  /// Récupérer tous les tours d'un kart (UNIQUEMENT pour la session courante)
+  /// Récupérer tous les tours d'un kart avec optimisations (pagination + debouncing)
   static Future<List<LiveLapData>> getKartLaps(String kartId, {int? limit}) async {
+    
     // Si aucune session courante, retourner une liste vide
     if (_currentSession == null) {
       return [];
     }
     
+    // 🚀 OPTIMISATION: Utiliser debouncing pour éviter les appels multiples
+    final debounceKey = 'get_kart_laps_$kartId';
+    
+    // Vérifier si on a un résultat récent en cache
+    final cachedResult = DebouncingService.getLastResult<List<LiveLapData>>(debounceKey);
+    if (cachedResult != null && !DebouncingService.isActive(debounceKey)) {
+      return cachedResult;
+    }
+    
+    // Créer un Completer pour attendre le résultat du debouncing
+    final completer = Completer<List<LiveLapData>>();
+    
+    FirebaseDebouncer.debounceGetKartLaps(
+      kartId,
+      () => _fetchKartLapsOptimized(kartId, limit: limit),
+      (result) {
+        final laps = result.cast<LiveLapData>();
+        if (!completer.isCompleted) {
+          completer.complete(laps);
+        }
+      },
+    );
+    
+    return completer.future;
+  }
+  
+  /// Récupérer les tours avec pagination optimisée
+  static Future<List<LiveLapData>> _fetchKartLapsOptimized(String kartId, {int? limit}) async {
+    if (_currentSession == null) return [];
+    
     try {
-      // STRICTEMENT lié à la session courante pour éviter la contamination entre sessions
+      // 📄 PAGINATION: Utiliser le service de pagination pour ce kart
+      final paginatorKey = '${_currentSession!.sessionId}_$kartId';
+      
+      if (!_lapsPaginators.containsKey(paginatorKey)) {
+        _lapsPaginators[paginatorKey] = PaginationFactory.createLapsPagination(
+          _currentSession!.sessionId,
+          kartId,
+        );
+      }
+      
+      final paginator = _lapsPaginators[paginatorKey]!;
+      
+      // Si limit spécifié et petit, utiliser la requête directe optimisée
+      if (limit != null && limit <= 15) {
+        return await _fetchKartLapsDirectOptimized(kartId, limit: limit);
+      }
+      
+      // Sinon utiliser la pagination pour gros datasets
+      final firstPage = await paginator.getPage(1);
+      final laps = firstPage.map((data) => LiveLapData.fromMap(data)).toList();
+      
+      return laps;
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  /// Récupération directe optimisée pour petites quantités de données
+  static Future<List<LiveLapData>> _fetchKartLapsDirectOptimized(String kartId, {int? limit}) async {
+    if (_currentSession == null) {
+      return [];
+    }
+    
+    final sessionId = _currentSession!.sessionId;
+    
+    try {
+      // Requête simplifiée SANS orderBy pour éviter le besoin d'index composite
+      // On triera en mémoire après récupération
       Query query = _firestore
           .collection(_collectionName)
-          .doc(_currentSession!.sessionId) // Utilise UNIQUEMENT la session courante
+          .doc(sessionId)
           .collection('laps')
-          .where('kartId', isEqualTo: kartId)
-          .orderBy('lapNumber');
+          .where('kartId', isEqualTo: kartId);
+          // .orderBy('lapNumber', descending: true); // TEMPORAIREMENT DÉSACTIVÉ - index requis
       
       if (limit != null) {
         query = query.limit(limit);
@@ -183,14 +259,18 @@ class LiveTimingStorageService {
       for (final doc in snapshot.docs) {
         try {
           final lap = LiveLapData.fromFirestore(doc);
-          // Double vérification: le tour doit appartenir à la session courante
-          if (lap.kartId == kartId) {
-            laps.add(lap);
-          }
+          laps.add(lap);
         } catch (e) {
-          // Ignorer les documents malformés
           continue;
         }
+      }
+      
+      // Trier en mémoire : plus récents en premier
+      laps.sort((a, b) => b.lapNumber.compareTo(a.lapNumber));
+      
+      // Appliquer la limite après tri
+      if (limit != null && laps.length > limit) {
+        return laps.take(limit).toList();
       }
       
       return laps;
@@ -347,6 +427,7 @@ class LiveTimingStorageService {
     final seconds = duration.inSeconds % 60;
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
+
 
   /// Dispose du service (nettoyage)
   static void dispose() {

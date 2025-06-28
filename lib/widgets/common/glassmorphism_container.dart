@@ -225,37 +225,46 @@ class GlassmorphismDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🖥️ Détecter si web pour contraindre la largeur
+    final isWeb = MediaQuery.of(context).size.width > 600;
+    
     return Dialog(
       backgroundColor: Colors.transparent,
-      child: GlassmorphismContainer(
-        blur: 20,
-        opacity: 0.15,
-        color: Colors.white,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Titre
-            if (title != null) ...[
-              Text(
-                title!,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: isWeb ? 700 : double.infinity, // 🎨 Web: proportionné aux dropdowns (650px + marge)
+        ),
+        child: GlassmorphismContainer(
+          blur: 20,
+          opacity: 0.15,
+          color: Colors.white,
+          padding: const EdgeInsets.all(8), // 🎨 Padding encore plus compact pour harmonie
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Titre
+              if (title != null) ...[
+                Text(
+                  title!,
+                  style: const TextStyle(
+                    fontSize: 16, // 🎨 Taille proportionnelle aux nouveaux dropdowns
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 8), // 🎨 Espacement plus compact
+              ],
 
-            // Contenu
-            child,
+              // Contenu
+              child,
 
-            // Actions
-            if (actions != null) ...[
-              const SizedBox(height: 16),
-              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions!),
+              // Actions
+              if (actions != null) ...[
+                const SizedBox(height: 8), // 🎨 Espacement plus compact
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: actions!),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

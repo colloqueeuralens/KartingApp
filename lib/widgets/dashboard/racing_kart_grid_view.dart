@@ -5,6 +5,11 @@ import 'package:rxdart/rxdart.dart';
 import 'dart:async';
 import '../../services/session_service.dart';
 import '../../services/optimistic_state_service.dart';
+import '../../services/global_live_timing_service.dart';
+import '../../services/lap_statistics_service.dart';
+import '../../services/enhanced_lap_statistics_service.dart';
+import '../../services/debouncing_service.dart';
+import '../../models/lap_statistics_models.dart';
 import '../../theme/racing_theme.dart';
 import 'racing_kart_card.dart';
 import 'empty_kart_slot.dart';
@@ -46,7 +51,7 @@ class RacingKartGridView extends StatefulWidget {
 }
 
 class _RacingKartGridViewState extends State<RacingKartGridView>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, DebouncingMixin {
   Set<int> _hoveredColumns = <int>{};
   bool _isMovingKart = false;
   int _lastValidPercentage = 0;
@@ -73,19 +78,32 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
     super.initState();
     // Écouter les changements d'état optimiste pour rebuild automatique
     _optimisticService.addListener(_onOptimisticStateChanged);
+    // Écouter les changements du service Live Timing global
+    GlobalLiveTimingService.instance.addListener(_onLiveTimingChanged);
+  }
+
+  void _onLiveTimingChanged() {
+    if (mounted) {
+      setState(() {
+        // Rebuild quand les données Live Timing changent
+      });
+    }
   }
 
   void _onOptimisticStateChanged() {
     if (mounted) {
-      // 🚀 CORRECTION FINALE: Rebuild immédiat mais avec debouncing pour éviter les cycles
-      // Permettre les mises à jour pendant les mouvements sans bloquer la déduplication
-      Future.microtask(() {
-        if (mounted) {
-          setState(() {
-            // Rebuild automatique quand l'état optimiste change
-          });
-        }
-      });
+      // 🚀 OPTIMISATION: Debounce les rebuilds pour éviter les cycles et améliorer les performances
+      debounce(
+        'optimistic_rebuild',
+        const Duration(milliseconds: 16), // 60 FPS max
+        () {
+          if (mounted) {
+            setState(() {
+              // Rebuild automatique quand l'état optimiste change
+            });
+          }
+        },
+      );
     }
   }
 
@@ -96,6 +114,12 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
     _dragDebounceTimer?.cancel();
     // Arrêter l'écoute de l'état optimiste
     _optimisticService.removeListener(_onOptimisticStateChanged);
+    // Arrêter l'écoute du service Live Timing global
+    GlobalLiveTimingService.instance.removeListener(_onLiveTimingChanged);
+    
+    // 🚀 OPTIMISATION: Annuler tous les debounces de ce widget
+    cancelAllDebounces();
+    
     super.dispose();
   }
 
@@ -258,20 +282,95 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
     required void Function(int, String) onConfirm,
     VoidCallback? onDelete,
   }) {
-    final blocked = Set<int>.from(usedNumbers);
-    if (initialNumber != null) blocked.remove(initialNumber);
-    final available = List.generate(
-      99,
-      (i) => i + 1,
-    ).where((n) => !blocked.contains(n)).toList();
+    final globalService = GlobalLiveTimingService.instance;
+    final isLiveTimingActive = globalService.isActive;
+    
     int? selNum = initialNumber;
     String? selPerf = initialPerf;
     const opts = ['++', '+', '~', '-', '--', '?'];
+
+    // Obtenir les karts disponibles depuis Live Timing ou fallback classique
+    List<int> availableNumbers;
+    Map<int, String> kartTeamNames = {};
+    Map<int, String> kartIdsMapping = {}; // Mapping numéro → ID réel
+    Map<int, Last10LapsStats> kartStatsCache = {}; // Cache des statistiques
+
+    if (isLiveTimingActive) {
+      // Mode Live Timing : utiliser seulement les karts présents en course
+      final availableKarts = globalService.availableKarts;
+      final blocked = Set<int>.from(usedNumbers);
+      if (initialNumber != null) blocked.remove(initialNumber);
+      
+      availableNumbers = availableKarts
+          .where((kart) => !blocked.contains(kart.number))
+          .map((kart) => kart.number)
+          .toList();
+      
+      // Mapper les noms d'équipes et les IDs réels
+      for (final kart in availableKarts) {
+        if (kart.teamName != null) {
+          kartTeamNames[kart.number] = kart.teamName!;
+        }
+        kartIdsMapping[kart.number] = kart.id; // Stocker l'ID réel
+      }
+    } else {
+      // Mode classique : tous les numéros 1-99
+      final blocked = Set<int>.from(usedNumbers);
+      if (initialNumber != null) blocked.remove(initialNumber);
+      availableNumbers = List.generate(99, (i) => i + 1)
+          .where((n) => !blocked.contains(n))
+          .toList();
+    }
+
+    // Variable pour éviter le chargement multiple
+    bool _isLoadingStats = false;
 
     showDialog(
       context: ctx,
       builder: (dCtx) => StatefulBuilder(
         builder: (dCtx, setDialog) {
+          // 🚀 CACHE INTELLIGENT OPTIMISÉ - Production Ready avec Debug
+          
+          if (isLiveTimingActive && availableNumbers.isNotEmpty && !_isLoadingStats) {
+            _isLoadingStats = true;
+            
+            // 🔄 INVALIDER LE CACHE avant de charger pour avoir les données les plus récentes
+            EnhancedLapStatisticsService.invalidateAllStats();
+            LapStatisticsService.invalidateAllStats();
+            
+            // 🎯 SMART CACHE: Charger progressivement avec cache intelligent
+            Future.microtask(() async {
+              for (final kartNumber in availableNumbers) { // 🔥 TOUS LES KARTS - Limite supprimée
+                try {
+                  final kartId = kartIdsMapping[kartNumber];
+                  
+                  if (kartId != null) {
+                    // 🚀 OPTIMISATION MULTI-NIVEAUX: Utilise le cache intelligent L1→L2→L3
+                    // Fallback sur cache original si erreur
+                    try {
+                      final stats = await EnhancedLapStatisticsService.getLast10LapsStatsAdaptive(kartId);
+                      kartStatsCache[kartNumber] = stats;
+                    } catch (e) {
+                      final stats = await LapStatisticsService.getLast10LapsStats(kartId);
+                      kartStatsCache[kartNumber] = stats;
+                    }
+                    
+                    // 🎨 Déclencher un rebuild du dialog seulement si monté
+                    if (dCtx.mounted) {
+                      setDialog(() {});
+                    }
+                  }
+                } catch (e) {
+                  // 🛡️ En cas d'erreur, utiliser des statistiques vides (fallback gracieux)
+                  kartStatsCache[kartNumber] = Last10LapsStats.empty();
+                }
+                
+                // 🎯 Micro-pause pour éviter la surcharge Firebase
+                await Future.delayed(const Duration(milliseconds: 50));
+              }
+              _isLoadingStats = false;
+            });
+          }
           return GlassmorphismDialog(
             title: initialNumber == null
                 ? 'Ajouter un kart (col ${col + 1})'
@@ -279,67 +378,238 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Dropdown numéro
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
+                // Indicateur de mode Live Timing - Compact
+                if (isLiveTimingActive)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
                     ),
-                  ),
-                  child: DropdownButton<int>(
-                    isExpanded: true,
-                    hint: const Text('Numéro de kart'),
-                    value: selNum,
-                    underline: const SizedBox.shrink(),
-                    items: available
-                        .map(
-                          (n) => DropdownMenuItem(
-                            value: n,
-                            child: Center(child: Text('$n')),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.live_tv, color: Colors.green, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Karts en course (Live Timing)',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
                           ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setDialog(() => selNum = v),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Dropdown performance avec style racing
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: const Text('Performance'),
-                    value: selPerf,
-                    underline: const SizedBox.shrink(),
-                    items: opts
-                        .map(
-                          (p) => DropdownMenuItem(
-                            value: p,
-                            child: Center(
-                              child: PerformanceIndicator(performance: p),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange, size: 14),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Démarrez Live Timing pour voir les équipes',
+                            style: TextStyle(
+                              color: Colors.orange,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setDialog(() => selPerf = v),
+                        ),
+                      ],
+                    ),
                   ),
+
+                // Dropdown numéro enrichi avec responsivité améliorée
+                Builder(
+                  builder: (context) {
+                    final screenWidth = MediaQuery.of(context).size.width;
+                    final isWeb = screenWidth > 600;
+                    
+                    return Container(
+                      constraints: BoxConstraints(
+                        maxWidth: isWeb ? 650 : double.infinity, // 🖥️ Web: largeur augmentée pour plus d'espace
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: DropdownButton<int>(
+                        isExpanded: true,
+                        hint: Text(isLiveTimingActive 
+                            ? 'Sélectionner un kart en course'
+                            : 'Numéro de kart'),
+                        value: selNum,
+                        underline: const SizedBox.shrink(),
+                        items: availableNumbers.map((n) {
+                          final teamName = kartTeamNames[n]; // 📊 Vraies données Live Timing
+                          final stats = kartStatsCache[n];
+                          return DropdownMenuItem(
+                            value: n,
+                            child: Builder(
+                              builder: (context) {
+                                // 📱 Responsive adaptatif selon la largeur d'écran
+                                final screenWidth = MediaQuery.of(context).size.width;
+                                
+                                // Calcul des flex ratios adaptatifs
+                                int leftFlex, rightFlex;
+                                if (screenWidth > 800) {
+                                  // 🖥️ Web large : 40% numéro/équipe, 60% statistiques
+                                  leftFlex = 2; rightFlex = 3;
+                                } else if (screenWidth > 600) {
+                                  // 💻 Web moyen : 45% numéro/équipe, 55% statistiques  
+                                  leftFlex = 9; rightFlex = 11;
+                                } else {
+                                  // 📱 Mobile : 35% numéro/équipe, 65% statistiques
+                                  leftFlex = 7; rightFlex = 13;
+                                }
+                                
+                                return Row(
+                                  children: [
+                                    // Partie gauche : Numéro + Équipe
+                                    Expanded(
+                                      flex: leftFlex,
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '$n',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11, // 🎯 Unifié à 11px
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          if (teamName != null)
+                                            Flexible(
+                                              child: Text(
+                                                teamName,
+                                                style: TextStyle(
+                                                  fontSize: 11, // 🎯 Unifié à 11px
+                                                  color: Colors.grey[700],
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    
+                                    // Partie droite : Statistiques - DONNÉES RÉELLES avec Debug
+                                    if (isLiveTimingActive) ...[
+                                      if (stats != null && stats.hasValidData) // 📊 DONNÉES RÉELLES
+                                        Expanded(
+                                          flex: rightFlex,
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.end,
+                                            children: [
+                                              _buildCompactStat("Moy", stats.averageTime),
+                                              const SizedBox(width: 4),
+                                              _buildCompactStat("Best", stats.bestTime),
+                                              const SizedBox(width: 4), 
+                                              _buildCompactStat("Worst", stats.worstTime),
+                                            ],
+                                          ),
+                                        )
+                                      else
+                                        // 🔍 AFFICHAGE INTELLIGENT: Gestion des différents états
+                                        Expanded(
+                                          flex: rightFlex,
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                _getStatsDisplayText(stats),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: _getStatsDisplayColor(stats),
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (v) => setDialog(() => selNum = v),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // Dropdown performance avec largeur unifiée
+                Builder(
+                  builder: (context) {
+                    final isWeb = MediaQuery.of(context).size.width > 600;
+                    
+                    return Container(
+                      constraints: BoxConstraints(
+                        maxWidth: isWeb ? 650 : double.infinity, // 🖥️ Même largeur que le dropdown numéro
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        hint: const Text('Performance'),
+                        value: selPerf,
+                        underline: const SizedBox.shrink(),
+                        items: opts
+                            .map(
+                              (p) => DropdownMenuItem(
+                                value: p,
+                                child: Center(
+                                  child: PerformanceIndicator(performance: p),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setDialog(() => selPerf = v),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -348,7 +618,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                 onPressed: () => Navigator.pop(dCtx),
                 child: const Text(
                   'Annuler',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
               if (onDelete != null)
@@ -361,9 +631,9 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.delete, color: Colors.white, size: 16),
-                      SizedBox(width: 4),
-                      Text('Supprimer', style: TextStyle(color: Colors.white)),
+                      Icon(Icons.delete, color: Colors.white, size: 14),
+                      SizedBox(width: 3),
+                      Text('Supprimer', style: TextStyle(color: Colors.white, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -381,12 +651,12 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
                     Icon(
                       initialNumber == null ? Icons.add : Icons.edit,
                       color: Colors.white,
-                      size: 16,
+                      size: 14,
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 3),
                     Text(
                       initialNumber == null ? 'Ajouter' : 'Modifier',
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ],
                 ),
@@ -414,7 +684,7 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
         actions: [
           GlassmorphismButton(
             onPressed: () => Navigator.pop(dCtx),
-            child: const Text('Annuler', style: TextStyle(color: Colors.white)),
+            child: const Text('Annuler', style: TextStyle(color: Colors.white, fontSize: 12)),
           ),
           GlassmorphismButton(
             color: Colors.red,
@@ -425,13 +695,29 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.delete, color: Colors.white, size: 16),
-                SizedBox(width: 4),
-                Text('Supprimer', style: TextStyle(color: Colors.white)),
+                Icon(Icons.delete, color: Colors.white, size: 14),
+                SizedBox(width: 3),
+                Text('Supprimer', style: TextStyle(color: Colors.white, fontSize: 12)),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Widget helper ultra-compact pour les statistiques des 10 derniers tours
+  Widget _buildCompactStat(String label, String value) {
+    // 📱 Responsive : polices unifiées et harmonieuses
+    final isWeb = MediaQuery.of(context).size.width > 600;
+    
+    return Text(
+      "$label: $value",
+      style: TextStyle(
+        fontSize: isWeb ? 11 : 8, // 🎨 Web: 11px (unifié), 📱 Mobile: 8px (compact)
+        color: Colors.black,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'SF Mono', // Police monospace pour alignement
       ),
     );
   }
@@ -515,16 +801,24 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
           _lastKartCount = currentKartCount;
         }
 
-        // Notifier le parent des changements de performance (avec cache)
+        // 🚀 OPTIMISATION: Debounce les notifications de performance pour éviter le spam
         if (widget.onPerformanceUpdate != null) {
           // Ne déclencher le callback que si les valeurs ont vraiment changé
           if (pct != _lastCachedPct || isOpt != _lastCachedIsOpt || threshold != _lastCachedThreshold) {
             _lastCachedPct = pct;
             _lastCachedIsOpt = isOpt;
             _lastCachedThreshold = threshold;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              widget.onPerformanceUpdate!(isOpt, pct, threshold);
-            });
+            
+            // Debounce les callbacks pour éviter les appels excessifs
+            debounce(
+              'performance_update',
+              const Duration(milliseconds: 100), // Limite à 10 updates/sec max
+              () {
+                if (mounted && widget.onPerformanceUpdate != null) {
+                  widget.onPerformanceUpdate!(isOpt, pct, threshold);
+                }
+              },
+            );
           }
         }
 
@@ -900,6 +1194,40 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
       // 🚀 Timestamp optimiste factice pour maintenir l'ordre cohérent
       optimisticTimestamp: DateTime.now(),
     );
+  }
+
+  /// Obtenir le texte d'affichage pour les statistiques selon l'état
+  String _getStatsDisplayText(Last10LapsStats? stats) {
+    if (stats == null) {
+      return "Chargement...";
+    }
+    
+    // Vérifier si c'est le cas "Manque de données" (moins de 10 tours)
+    if (stats.averageTime == 'Manque de données') {
+      return "Manque de données";
+    }
+    
+    // Vérifier si c'est le cas "pas de données"
+    if (!stats.hasValidData) {
+      return "Aucune donnée";
+    }
+    
+    return "Données invalides";
+  }
+
+  /// Obtenir la couleur d'affichage pour les statistiques selon l'état
+  Color _getStatsDisplayColor(Last10LapsStats? stats) {
+    if (stats == null) {
+      return Colors.blue; // Chargement en cours
+    }
+    
+    // Vérifier si c'est le cas "Manque de données" (moins de 10 tours)
+    if (stats.averageTime == 'Manque de données') {
+      return Colors.amber; // Couleur d'avertissement pour manque de données
+    }
+    
+    // Autres cas (pas de données, erreurs)
+    return Colors.orange;
   }
 }
 
