@@ -52,7 +52,9 @@ COLUMN_TRANSLATIONS = {
     "Lap": "Tours", "Lap Time": "Dernier T.", "Tour": "Tours",
     
     # Autres termes possibles
-    "Name": "Pilote", "Nom": "Pilote", "Team": "Equipe", "Équipe": "Equipe","Categoria": "Categorie","In pista": "En Piste",
+    "Name": "Pilote", "Nom": "Pilote", "Team": "Equipe", "Équipe": "Equipe",
+    "Categoria": "Categorie", "In pista": "En Piste", "Pena": "Penalite", 
+    "Pit stop": "Pit Stop",
 }
 
 
