@@ -154,6 +154,7 @@ class GlassmorphismSectionCardCompact extends StatelessWidget {
   final List<Widget> children;
   final Color? accentColor;
   final Gradient? gradient;
+  final Widget? trailingWidget; // Widget à afficher à droite du header
 
   const GlassmorphismSectionCardCompact({
     super.key,
@@ -163,6 +164,7 @@ class GlassmorphismSectionCardCompact extends StatelessWidget {
     required this.children,
     this.accentColor,
     this.gradient,
+    this.trailingWidget,
   });
 
   @override
@@ -262,6 +264,10 @@ class GlassmorphismSectionCardCompact extends StatelessWidget {
                           ],
                         ),
                       ),
+                      if (trailingWidget != null) ...[
+                        const SizedBox(width: 16),
+                        trailingWidget!,
+                      ],
                     ],
                   ),
                 ),

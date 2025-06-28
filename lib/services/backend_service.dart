@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
+import '../models/live_timing_models.dart';
+import 'live_timing_storage_service.dart';
 
 /// Service pour communiquer avec le backend FastAPI
 class BackendService {
@@ -186,6 +188,11 @@ class LiveTimingWebSocketService {
   // NOUVEAU: Ordre des colonnes reçu du backend (C1→C2→C3...)
   List<String> _columnOrder = [];
 
+  // NOUVEAU: Cache pour détecter les nouveaux tours
+  final Map<String, String> _lastLapTimes = {};
+  final Map<String, int> _lapCounters = {};
+  bool _lapDetectionEnabled = false;
+
   /// Expose proprement le cache de tous les karts
   Map<String, Map<String, dynamic>> get allKartsData =>
       Map<String, Map<String, dynamic>>.from(_kartDataCache);
@@ -201,6 +208,21 @@ class LiveTimingWebSocketService {
 
   /// Circuit ID actuellement connecté
   String? get currentCircuitId => _currentCircuitId;
+
+  /// Activer/désactiver la détection automatique des tours
+  void enableLapDetection(bool enable) {
+    _lapDetectionEnabled = enable;
+    if (!enable) {
+      _lastLapTimes.clear();
+      _lapCounters.clear();
+    }
+  }
+
+  /// État de la détection des tours
+  bool get isLapDetectionEnabled => _lapDetectionEnabled;
+
+  /// Nombre de tours détectés par kart
+  Map<String, int> get lapCounters => Map<String, int>.from(_lapCounters);
 
   /// Se connecter à un circuit pour le timing en temps réel
   Future<bool> connect(String circuitId) async {
@@ -259,6 +281,9 @@ class LiveTimingWebSocketService {
     _kartDataCache.clear();
     _messageCounter = 0;
     _columnOrder.clear();
+    _lastLapTimes.clear();
+    _lapCounters.clear();
+    _lapDetectionEnabled = false;
   }
 
   /// Gérer les messages reçus
@@ -316,6 +341,11 @@ class LiveTimingWebSocketService {
           }
         }
       });
+
+      // NOUVEAU: Détecter les nouveaux tours si activé
+      if (_lapDetectionEnabled) {
+        _detectNewLaps(drivers);
+      }
 
       // NOUVEAU: Afficher la totalité du cache à chaque message
 
@@ -401,6 +431,95 @@ class LiveTimingWebSocketService {
         }
       }
     });
+  }
+
+  /// Détecter les nouveaux tours basé sur le changement de "Dernier T."
+  void _detectNewLaps(Map<String, dynamic> drivers) {
+    drivers.forEach((kartId, kartData) {
+      if (kartData is Map<String, dynamic>) {
+        // Rechercher le champ "Dernier T." avec différentes variantes
+        String? currentLastLap;
+        for (final key in ['Dernier T.', 'Last Lap', 'Dernier Tour', 'LastLap']) {
+          if (kartData.containsKey(key) && kartData[key] != null) {
+            currentLastLap = kartData[key].toString().trim();
+            break;
+          }
+        }
+
+        // Vérifier si on a trouvé un temps de tour valide
+        if (currentLastLap != null && 
+            currentLastLap.isNotEmpty && 
+            currentLastLap != '--:--' && 
+            currentLastLap != '0:00.000' &&
+            !currentLastLap.contains('--') &&
+            currentLastLap != 'null') {
+          
+          // Comparer avec le dernier temps stocké
+          final previousLap = _lastLapTimes[kartId];
+          
+          if (previousLap != currentLastLap) {
+            // Nouveau tour détecté !
+            _lapCounters[kartId] = (_lapCounters[kartId] ?? 0) + 1;
+            _lastLapTimes[kartId] = currentLastLap;
+            
+            // Créer et stocker le nouveau tour
+            _storeLiveLap(kartId, currentLastLap, kartData);
+          }
+        }
+      }
+    });
+  }
+
+  /// Stocker un nouveau tour détecté
+  void _storeLiveLap(String kartId, String lapTime, Map<String, dynamic> kartData) async {
+    try {
+      final lapNumber = _lapCounters[kartId] ?? 1;
+      
+      // Créer les données de tour
+      final lap = LiveLapData.create(
+        kartId: kartId,
+        lapNumber: lapNumber,
+        lapTime: lapTime,
+        timingData: kartData,
+      );
+      
+      // Stocker via le service de stockage
+      await LiveTimingStorageService.storeLap(lap);
+      
+    } catch (e) {
+      // En cas d'erreur, ne pas bloquer le flux WebSocket
+      // On pourrait logger l'erreur ou la signaler d'une autre façon
+    }
+  }
+
+  /// Réinitialiser les compteurs de tours (nouveau timing)
+  void resetLapCounters() {
+    _lastLapTimes.clear();
+    _lapCounters.clear();
+  }
+
+  /// Traiter des données simulées (pour les tests)
+  void processSimulatedData(Map<String, dynamic> simulatedData) {
+    // Mettre à jour le cache avec les données simulées
+    _kartDataCache.clear();
+    _kartDataCache.addAll(Map<String, Map<String, dynamic>>.from(simulatedData));
+    
+    // Détecter les nouveaux tours dans les données simulées
+    if (_lapDetectionEnabled) {
+      _detectNewLaps(simulatedData);
+    }
+    
+    // Créer un message simulé dans le format attendu
+    final simulatedMessage = {
+      'type': 'karting_data',
+      'drivers': simulatedData,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    
+    // Transmettre les données simulées via le controller
+    if (_controller != null && !_controller!.isClosed) {
+      _controller!.add(simulatedMessage);
+    }
   }
 
   /// Fermer le service

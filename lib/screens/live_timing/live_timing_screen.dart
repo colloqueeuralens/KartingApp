@@ -4,10 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/common/app_bar_actions.dart';
 import '../../widgets/common/glassmorphism_container.dart';
 import '../../widgets/live_timing/live_timing_table.dart';
+import '../../widgets/live_timing/live_timing_history_tab.dart';
+import '../../widgets/live_timing/live_timing_stats_tab.dart';
 import '../../widgets/live_timing/debug_sections.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
 import '../../services/backend_service.dart';
+import '../../services/live_timing_storage_service.dart';
+import '../../services/live_timing_simulator.dart';
 import '../../theme/racing_theme.dart';
 
 /// Page LiveTiming avec design racing timing board
@@ -20,7 +24,7 @@ class LiveTimingScreen extends StatefulWidget {
   State<LiveTimingScreen> createState() => _LiveTimingScreenState();
 }
 
-class _LiveTimingScreenState extends State<LiveTimingScreen> {
+class _LiveTimingScreenState extends State<LiveTimingScreen> with TickerProviderStateMixin {
   final LiveTimingWebSocketService _wsService = LiveTimingWebSocketService();
   bool _backendHealthy = false;
   bool _timingActive = false;
@@ -32,15 +36,45 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   Map<String, Map<String, dynamic>> _driversData = {};
   String? _currentCircuitName;
   int _connectionAttempts = 0;
+  
+  // Onglets
+  late TabController _tabController;
+  int _currentTabIndex = 0;
+  
+  // Simulateur pour tests
+  final LiveTimingSimulator _simulator = LiveTimingSimulator();
+  bool _isSimulating = false;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      setState(() {
+        _currentTabIndex = _tabController.index;
+      });
+    });
+    
+    // Configurer le simulateur
+    _simulator.onDataUpdate = (data) {
+      if (mounted && _isSimulating) {
+        setState(() {
+          _driversData = Map<String, Map<String, dynamic>>.from(data);
+          _lastTimingData = data;
+        });
+        
+        // Traiter les données simulées via le WebSocket service pour la détection de tours
+        _wsService.processSimulatedData(data);
+      }
+    };
+    
     _checkBackendHealth();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
+    _simulator.stopSimulation();
     _wsService.dispose();
     super.dispose();
   }
@@ -168,6 +202,17 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
       return;
     }
 
+    // Démarrer une nouvelle session de stockage des tours
+    try {
+      await LiveTimingStorageService.startSession(circuitId);
+    } catch (e) {
+      // Log l'erreur mais ne bloque pas le timing
+      print('Erreur lors du démarrage de la session de stockage: $e');
+    }
+
+    // Activer la détection automatique des tours
+    _wsService.enableLapDetection(true);
+
     // Mark timing as active
     if (mounted) {
       setState(() {
@@ -178,6 +223,16 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
   }
 
   Future<void> _stopTiming(String circuitId) async {
+    // Désactiver la détection des tours
+    _wsService.enableLapDetection(false);
+    
+    // Arrêter la session de stockage
+    try {
+      await LiveTimingStorageService.stopSession();
+    } catch (e) {
+      print('Erreur lors de l\'arrêt de la session de stockage: $e');
+    }
+    
     // Stop timing backend
     final success = await BackendService.stopTiming(circuitId);
     
@@ -195,6 +250,61 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
     } else if (mounted) {
       setState(() {
         _errorMessage = 'Impossible d\'arrêter le timing backend';
+      });
+    }
+  }
+
+  /// Démarrer la simulation de données Live Timing
+  Future<void> _startSimulation(String circuitId) async {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    try {
+      // Démarrer une session de stockage pour la simulation
+      await LiveTimingStorageService.startSession(circuitId);
+      
+      // Activer la détection des tours pour la simulation
+      _wsService.enableLapDetection(true);
+      
+      // Démarrer la simulation
+      _simulator.startSimulation();
+      
+      setState(() {
+        _isSimulating = true;
+        _timingActive = true;
+        _wsConnected = true; // Simuler une connexion
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erreur lors du démarrage de la simulation: $e';
+      });
+    }
+  }
+
+  /// Arrêter la simulation
+  Future<void> _stopSimulation() async {
+    try {
+      // Arrêter le simulateur
+      _simulator.stopSimulation();
+      
+      // Désactiver la détection des tours
+      _wsService.enableLapDetection(false);
+      
+      // Arrêter la session de stockage
+      await LiveTimingStorageService.stopSession();
+      
+      setState(() {
+        _isSimulating = false;
+        _timingActive = false;
+        _wsConnected = false;
+        _driversData.clear();
+        _lastTimingData = null;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erreur lors de l\'arrêt de la simulation: $e';
       });
     }
   }
@@ -310,20 +420,31 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Bouton START - Live Timing réel
         _buildCompactButton(
           icon: Icons.play_arrow,
           label: 'START',
-          isEnabled: _backendHealthy && !_timingActive,
+          isEnabled: _backendHealthy && !_timingActive && !_isSimulating,
           color: RacingTheme.excellent,
           onPressed: () => _startTiming(circuitId),
         ),
         const SizedBox(width: 8),
+        // Bouton SIM - Simulation pour tests
+        _buildCompactButton(
+          icon: Icons.science,
+          label: 'SIM',
+          isEnabled: !_timingActive && !_isSimulating,
+          color: RacingTheme.racingBlue,
+          onPressed: () => _startSimulation(circuitId),
+        ),
+        const SizedBox(width: 8),
+        // Bouton STOP - Arrêter timing ou simulation
         _buildCompactButton(
           icon: Icons.stop,
           label: 'STOP',
-          isEnabled: _backendHealthy && _timingActive,
+          isEnabled: _timingActive || _isSimulating,
           color: RacingTheme.bad,
-          onPressed: () => _stopTiming(circuitId),
+          onPressed: () => _isSimulating ? _stopSimulation() : _stopTiming(circuitId),
         ),
       ],
     );
@@ -501,6 +622,95 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
     );
   }
 
+  Widget _buildTabBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: RacingTheme.racingBlack.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: RacingTheme.racingGreen.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicatorColor: RacingTheme.racingGreen,
+        indicatorWeight: 3,
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: RacingTheme.racingGreen,
+        unselectedLabelColor: Colors.white60,
+        labelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.8,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        tabs: const [
+          Tab(
+            icon: Icon(Icons.live_tv, size: 20),
+            text: 'LIVE',
+          ),
+          Tab(
+            icon: Icon(Icons.history, size: 20),
+            text: 'TOURS',
+          ),
+          Tab(
+            icon: Icon(Icons.analytics, size: 20),
+            text: 'STATS',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabContent(String selectedCircuitId) {
+    return Expanded(
+      child: TabBarView(
+        controller: _tabController,
+        children: [
+          // Onglet LIVE - Contenu temps réel existant
+          _buildLiveTab(),
+          // Onglet TOURS - Historique des tours
+          LiveTimingHistoryTab(
+            isConnected: _wsConnected && _wsService.isConnected,
+          ),
+          // Onglet STATS - Statistiques et export
+          LiveTimingStatsTab(
+            isConnected: _wsConnected && _wsService.isConnected,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveTab() {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Tableau de timing principal
+          LiveTimingTable(
+            driversData: _driversData,
+            isConnected: _wsConnected && _wsService.isConnected,
+            columnOrder: _wsService.columnOrder,
+          ),
+          
+          // Sections de debug pliables
+          DebugSections(
+            lastTimingData: _lastTimingData,
+            lastRawMessage: _lastRawMessage,
+          ),
+          
+          // Espace en bas pour le scroll
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -562,32 +772,20 @@ class _LiveTimingScreenState extends State<LiveTimingScreen> {
             });
           });
 
-          return SingleChildScrollView(
-            child: Column(
-              children: [
-                // Message d'erreur
-                _buildErrorMessage(),
+          return Column(
+            children: [
+              // Message d'erreur
+              _buildErrorMessage(),
 
-                // Contrôles de timing avec nom du circuit intégré
-                _buildTimingControls(selectedCircuitId),
+              // Contrôles de timing avec nom du circuit intégré
+              _buildTimingControls(selectedCircuitId),
 
-                // Tableau de timing principal
-                LiveTimingTable(
-                  driversData: _driversData,
-                  isConnected: _wsConnected && _wsService.isConnected,
-                  columnOrder: _wsService.columnOrder, // NOUVEAU: Ordre des colonnes du backend
-                ),
+              // Barre d'onglets
+              _buildTabBar(),
 
-                // Sections de debug pliables
-                DebugSections(
-                  lastTimingData: _lastTimingData,
-                  lastRawMessage: _lastRawMessage,
-                ),
-
-                // Espace en bas pour le scrolls
-                const SizedBox(height: 20),
-              ],
-            ),
+              // Contenu des onglets
+              _buildTabContent(selectedCircuitId),
+            ],
           );
         },
       ),

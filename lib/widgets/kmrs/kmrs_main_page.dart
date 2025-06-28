@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
+import 'dart:async';
 import '../../services/kmrs_service.dart';
 import '../../models/kmrs_models.dart';
 import '../../theme/racing_theme.dart';
@@ -36,6 +37,12 @@ class _KmrsMainPageState extends State<KmrsMainPage> {
   
   String? _selectedPilotId;
 
+  // State management pour le chrono de course
+  Timer? _raceTimer;
+  bool _isRaceRunning = false;
+  DateTime? _raceStartTime;
+  Duration _currentRaceDuration = Duration.zero;
+
   @override
   void dispose() {
     // Controllers KMRS authentiques
@@ -47,7 +54,39 @@ class _KmrsMainPageState extends State<KmrsMainPage> {
     _pitInSecondsController.dispose();
     _pitOutMinutesController.dispose();
     _pitOutSecondsController.dispose();
+    
+    // Nettoyage du timer
+    _raceTimer?.cancel();
     super.dispose();
+  }
+
+  // Méthodes pour gérer le chrono de course
+  void _startRaceTimer() {
+    if (!_isRaceRunning) {
+      setState(() {
+        _isRaceRunning = true;
+        _raceStartTime = DateTime.now();
+      });
+      
+      _raceTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        _updateRaceTime();
+      });
+    }
+  }
+
+  void _stopRaceTimer() {
+    setState(() {
+      _isRaceRunning = false;
+    });
+    _raceTimer?.cancel();
+  }
+
+  void _updateRaceTime() {
+    if (_raceStartTime != null) {
+      setState(() {
+        _currentRaceDuration = DateTime.now().difference(_raceStartTime!);
+      });
+    }
   }
 
   @override
@@ -584,6 +623,7 @@ class _KmrsMainPageState extends State<KmrsMainPage> {
       subtitle: 'Optimisation des relais et temps maximum actuel',
       icon: Icons.calculate,
       accentColor: Colors.orange,
+      trailingWidget: _buildStrategyBadges(nombreRelaisRestants, nombreArretsRestants),
       children: [
         _buildStrategyMetricsGrid(regularStints, jokerStints, maxCurrentStint),
       ],
@@ -786,6 +826,7 @@ class _KmrsMainPageState extends State<KmrsMainPage> {
       subtitle: 'Historique des relais et temps restants',
       icon: Icons.list,
       accentColor: Colors.purple,
+      trailingWidget: _buildRaceChronometer(),
       children: [
         // Plus de scroll horizontal : tout s'affiche en pleine largeur
         tableContent,
@@ -1175,5 +1216,217 @@ class _KmrsMainPageState extends State<KmrsMainPage> {
     );
 
     HapticFeedback.lightImpact();
+  }
+
+  // Widget pour afficher les badges du tableau de stratégie
+  Widget _buildStrategyBadges(int nombreRelaisRestants, int nombreArretsRestants) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    if (isMobile) {
+      // Version mobile : badges empilés verticalement
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildInfoBadge(
+            'RELAIS RESTANTS',
+            nombreRelaisRestants.toString(),
+            Colors.orange,
+          ),
+          const SizedBox(height: 4),
+          _buildInfoBadge(
+            'ARRÊTS RESTANTS',
+            nombreArretsRestants.toString(),
+            Colors.deepOrange,
+          ),
+        ],
+      );
+    } else {
+      // Version desktop : badges côte à côte
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildInfoBadge(
+            'RELAIS RESTANTS',
+            nombreRelaisRestants.toString(),
+            Colors.orange,
+          ),
+          const SizedBox(width: 8),
+          _buildInfoBadge(
+            'ARRÊTS RESTANTS',
+            nombreArretsRestants.toString(),
+            Colors.deepOrange,
+          ),
+        ],
+      );
+    }
+  }
+
+  // Widget pour afficher un badge d'information
+  Widget _buildInfoBadge(String label, String value, Color color) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 6 : 8,
+        vertical: isMobile ? 4 : 6,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: 0.2),
+            color.withValues(alpha: 0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: isMobile ? 12 : 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: isMobile ? 8 : 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget pour le chrono de course
+  Widget _buildRaceChronometer() {
+    final session = widget.kmrsService.currentSession;
+    final config = session?.configuration;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    if (config == null) {
+      return _buildInfoBadge('CHRONO', '--:--:--', Colors.grey);
+    }
+    
+    // Calcul des temps
+    final raceDurationMinutes = (config.raceDurationHours * 60).round();
+    final raceDuration = Duration(minutes: raceDurationMinutes);
+    final remainingRace = _isRaceRunning 
+        ? raceDuration - _currentRaceDuration 
+        : raceDuration;
+    final remainingBeforePitClose = remainingRace - Duration(minutes: config.pitLaneClosedEndMinutes);
+    
+    if (isMobile) {
+      // Version mobile : Layout vertical
+      return Column(
+        children: [
+          _buildInfoBadge(
+            'TEMPS RESTANT',
+            _formatDurationHMS(remainingRace.isNegative ? Duration.zero : remainingRace),
+            _isRaceRunning ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(height: 4),
+          _buildInfoBadge(
+            'AVANT FERMETURE',
+            _formatDurationHMS(remainingBeforePitClose.isNegative ? Duration.zero : remainingBeforePitClose),
+            remainingBeforePitClose.inMinutes > 10 ? Colors.blue : Colors.orange,
+          ),
+          const SizedBox(height: 6),
+          _buildRaceTimerButton(),
+        ],
+      );
+    } else {
+      // Version desktop : Layout horizontal
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildInfoBadge(
+            'TEMPS RESTANT',
+            _formatDurationHMS(remainingRace.isNegative ? Duration.zero : remainingRace),
+            _isRaceRunning ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          _buildInfoBadge(
+            'AVANT FERMETURE',
+            _formatDurationHMS(remainingBeforePitClose.isNegative ? Duration.zero : remainingBeforePitClose),
+            remainingBeforePitClose.inMinutes > 10 ? Colors.blue : Colors.orange,
+          ),
+          const SizedBox(width: 12),
+          _buildRaceTimerButton(),
+        ],
+      );
+    }
+  }
+
+  // Bouton START/STOP pour le chrono
+  Widget _buildRaceTimerButton() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _isRaceRunning ? _stopRaceTimer : _startRaceTimer,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 8 : 12,
+            vertical: isMobile ? 6 : 8,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: _isRaceRunning
+                  ? [
+                      Colors.red.withValues(alpha: 0.8),
+                      Colors.red.withValues(alpha: 0.6),
+                    ]
+                  : [
+                      RacingTheme.racingGreen.withValues(alpha: 0.8),
+                      RacingTheme.racingGreen.withValues(alpha: 0.6),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: (_isRaceRunning ? Colors.red : RacingTheme.racingGreen).withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _isRaceRunning ? Icons.stop : Icons.play_arrow,
+                color: Colors.white,
+                size: isMobile ? 16 : 18,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _isRaceRunning ? 'STOP' : 'START',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isMobile ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
