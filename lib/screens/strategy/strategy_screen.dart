@@ -69,7 +69,10 @@ class _StrategyScreenState extends State<StrategyScreen>
     ];
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(() {
-      setState(() {}); // Force rebuild when tab changes
+      // ✅ FIX: Pas de setState si déjà initialisé (évite "Initialization KMRS")
+      if (_isInitialized) {
+        setState(() {}); // Force rebuild when tab changes
+      }
     });
     _initializeKmrs();
   }
@@ -82,9 +85,22 @@ class _StrategyScreenState extends State<StrategyScreen>
   }
 
   Future<void> _initializeKmrs() async {
+    // ✅ Éviter les initialisations multiples
     if (_isInitialized) return;
 
     try {
+      // ✅ Vérifier d'abord le cache du service
+      if (_kmrsService.currentSession != null) {
+        // Cache disponible - marquer comme initialisé immédiatement
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+        }
+        return;
+      }
+      
+      // ✅ Le service a maintenant un cache - pas de rechargement inutile
       await _kmrsService.loadOrCreateSession();
       
       if (mounted) {
@@ -247,18 +263,42 @@ class _StrategyScreenState extends State<StrategyScreen>
   }
 
   Widget _buildBody() {
-    return ListenableBuilder(
-      listenable: _kmrsService,
-      builder: (context, _) {
-        if (_kmrsService.isLoading) {
-          return _buildLoadingState();
-        }
-
-        if (_kmrsService.error != null) {
+    // ✅ StreamBuilder pour synchronisation temps réel multi-plateformes
+    return StreamBuilder<RaceSession?>(
+      stream: _kmrsService.getKmrsSessionStream(),
+      builder: (context, snapshot) {
+        // ✅ Error state
+        if (snapshot.hasError) {
           return _buildErrorState();
         }
 
+        // ✅ Success state - marquer comme initialisé automatiquement
+        if (snapshot.hasData && !_isInitialized) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            setState(() {
+              _isInitialized = true;
+            });
+          });
+        }
+
+        // ✅ FIX: Utiliser cache si disponible, sinon loading
         if (!_isInitialized) {
+          // Essayer d'utiliser le cache du service
+          if (_kmrsService.currentSession != null) {
+            // Cache disponible - pas de loading
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              setState(() {
+                _isInitialized = true;
+              });
+            });
+            return _buildKmrsTabView();
+          }
+          
+          // Vraiment pas de données - afficher loading
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _buildLoadingState();
+          }
+          
           return _buildInitializingState();
         }
 

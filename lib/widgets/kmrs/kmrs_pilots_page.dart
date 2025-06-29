@@ -31,9 +31,22 @@ class KmrsPilotsPage extends StatelessWidget {
             ],
           ),
         ),
-        child: ListenableBuilder(
-          listenable: kmrsService,
-          builder: (context, _) {
+        child: StreamBuilder<RaceSession?>(
+          stream: kmrsService.getKmrsSessionStream(),
+          builder: (context, snapshot) {
+            // Gestion d'erreur
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Erreur: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              );
+            }
+            
+            // Utiliser les données du stream ou cache du service
+            final session = snapshot.data ?? kmrsService.currentSession;
+            
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(

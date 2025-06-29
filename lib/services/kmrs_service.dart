@@ -15,6 +15,7 @@ class KmrsService extends ChangeNotifier {
   RaceSession? _currentSession;
   bool _isLoading = false;
   String? _error;
+  bool _isInitialized = false; // Cache flag to prevent reloads
   
   // Chronométrage
   DateTime? _raceStartTime;
@@ -42,13 +43,47 @@ class KmrsService extends ChangeNotifier {
   DateTime? get raceStartTime => _raceStartTime;
   Duration get elapsedTime => _elapsedTime;
 
-  /// Charge ou crée une session KMRS
+  /// Stream Firebase temps réel pour synchronisation multi-plateformes
+  Stream<RaceSession?> getKmrsSessionStream([String? sessionId]) {
+    final docId = sessionId ?? 'kmrs_main_session'; // ✅ ID fixe pour sync multi-plateformes
+    if (kDebugMode) {
+      print('🔥 KmrsService: Listening to Firebase doc: $docId');
+    }
+    return _firestore.collection('kmrs_sessions').doc(docId).snapshots().map((doc) {
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        // ✅ Mettre à jour le cache local
+        _currentSession = RaceSession.fromMap(data);
+        _isInitialized = true;
+        _updateRacingData();
+        
+        if (kDebugMode) {
+          print('🔥 KmrsService: Firebase data received - ${_currentSession!.pilots.length} pilots');
+        }
+        
+        notifyListeners(); // ✅ Déclencher rebuild immédiat pour nouveaux pilots
+        return _currentSession;
+      } else {
+        if (kDebugMode) {
+          print('🔥 KmrsService: No Firebase data found for doc: $docId');
+        }
+      }
+      return null;
+    });
+  }
+
+  /// Charge ou crée une session KMRS (avec cache persistant)
   Future<void> loadOrCreateSession([String? sessionId]) async {
+    // ✅ Cache: Éviter les recharges si déjà initialisé
+    if (_isInitialized && _currentSession != null) {
+      return;
+    }
+
     try {
       _setLoading(true);
       _setError(null);
 
-      final docId = sessionId ?? 'default';
+      final docId = sessionId ?? 'kmrs_main_session'; // ✅ ID fixe pour sync multi-plateformes
       final doc = await _firestore.collection('kmrs_sessions').doc(docId).get();
       
       if (doc.exists && doc.data() != null) {
@@ -58,6 +93,7 @@ class KmrsService extends ChangeNotifier {
         await saveSession();
       }
       
+      _isInitialized = true; // ✅ Marquer comme initialisé
       _updateRacingData();
       notifyListeners();
     } catch (e) {
@@ -72,9 +108,18 @@ class KmrsService extends ChangeNotifier {
     if (_currentSession == null) return false;
 
     try {
+      if (kDebugMode) {
+        print('💾 KmrsService: Saving to Firebase doc: ${_currentSession!.id} - ${_currentSession!.pilots.length} pilots');
+      }
       await _firestore.collection('kmrs_sessions').doc(_currentSession!.id).set(_currentSession!.toMap());
+      if (kDebugMode) {
+        print('💾 KmrsService: Save successful');
+      }
       return true;
     } catch (e) {
+      if (kDebugMode) {
+        print('💾 KmrsService: Save error: $e');
+      }
       _setError('Erreur de sauvegarde: $e');
       return false;
     }
@@ -118,8 +163,14 @@ class KmrsService extends ChangeNotifier {
       final existingIndex = pilots.indexWhere((p) => p.id == pilot.id);
       
       if (existingIndex >= 0) {
+        if (kDebugMode) {
+          print('👤 KmrsService: Updating existing pilot: ${pilot.name}');
+        }
         pilots[existingIndex] = pilot;
       } else {
+        if (kDebugMode) {
+          print('👤 KmrsService: Adding new pilot: ${pilot.name}');
+        }
         pilots.add(pilot);
       }
       
@@ -136,9 +187,20 @@ class KmrsService extends ChangeNotifier {
         calculations: _currentSession!.calculations,
       );
       
-      await saveSession();
+      if (kDebugMode) {
+        print('👤 KmrsService: Total pilots now: ${pilots.length}');
+      }
+      
+      // ✅ Déclencher rebuild immédiat pour nouveaux pilots
       notifyListeners();
+      
+      // ✅ Petit délai pour optimistic update, puis sauvegarde Firebase
+      await Future.delayed(const Duration(milliseconds: 50));
+      await saveSession();
     } catch (e) {
+      if (kDebugMode) {
+        print('👤 KmrsService: updatePilot error: $e');
+      }
       _setError('Erreur de mise à jour pilote: $e');
     }
   }
@@ -413,7 +475,7 @@ class KmrsService extends ChangeNotifier {
 
   RaceSession _createDefaultSession() {
     return RaceSession(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: 'kmrs_main_session', // ✅ ID fixe pour synchronisation multi-plateformes
       sessionName: 'Session KMRS ${DateTime.now().day}/${DateTime.now().month}',
       createdAt: DateTime.now(),
       circuitName: 'Circuit par défaut',
@@ -480,6 +542,20 @@ class KmrsService extends ChangeNotifier {
       position: 1,
       gridData: KmrsCalculationEngine.generateRacingGrid(_currentSession!),
     );
+  }
+
+  /// Vider le cache et recharger (force reload)
+  Future<void> refresh() async {
+    _currentSession = null;
+    _error = null;
+    _isInitialized = false; // ✅ Reset cache flag
+    await loadOrCreateSession();
+  }
+
+  /// Force le rechargement depuis Firebase (bypass cache)
+  Future<void> forceReload() async {
+    _isInitialized = false;
+    await loadOrCreateSession();
   }
 
   @override

@@ -104,9 +104,19 @@ class _KmrsMainPageState extends State<KmrsMainPage> {
           stops: const [0.0, 0.5, 1.0],
         ),
       ),
-      child: ListenableBuilder(
-        listenable: widget.kmrsService,
-        builder: (context, _) {
+      child: StreamBuilder<RaceSession?>(
+        stream: widget.kmrsService.getKmrsSessionStream(),
+        builder: (context, snapshot) {
+          // Gestion d'erreur
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                'Erreur: ${snapshot.error}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            );
+          }
+          
           return Padding(
             padding: const EdgeInsets.all(24),
             child: _buildResponsiveLayout(context),

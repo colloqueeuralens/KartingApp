@@ -13,6 +13,7 @@ class StrategyService extends ChangeNotifier {
   StrategyDocument? _currentDocument;
   bool _isLoading = false;
   String? _error;
+  bool _isInitialized = false; // Cache flag to prevent reloads
 
   /// Document de stratégie actuel
   StrategyDocument? get currentDocument => _currentDocument;
@@ -26,8 +27,26 @@ class StrategyService extends ChangeNotifier {
   /// Feuilles disponibles
   List<StrategySheet> get sheets => _currentDocument?.sheets ?? [];
 
-  /// Charge ou crée le document de stratégie
+  /// Stream Firebase temps réel pour synchronisation multi-plateformes
+  Stream<StrategyDocument?> getStrategyStream() {
+    return _firestore.collection('strategy').doc('main').snapshots().map((doc) {
+      if (doc.exists && doc.data() != null) {
+        // ✅ Mettre à jour le cache local
+        _currentDocument = StrategyDocument.fromMap(doc.data()!);
+        _isInitialized = true;
+        return _currentDocument;
+      }
+      return null;
+    });
+  }
+
+  /// Charge ou crée le document de stratégie (avec cache persistant)
   Future<void> loadOrCreateDocument() async {
+    // ✅ Cache: Éviter les recharges si déjà initialisé
+    if (_isInitialized && _currentDocument != null) {
+      return;
+    }
+
     try {
       _setLoading(true);
       _setError(null);
@@ -43,6 +62,7 @@ class StrategyService extends ChangeNotifier {
         await saveDocument();
       }
       
+      _isInitialized = true; // ✅ Marquer comme initialisé
       notifyListeners();
     } catch (e) {
       _setError('Erreur de chargement: $e');
@@ -64,7 +84,7 @@ class StrategyService extends ChangeNotifier {
     }
   }
 
-  /// Met à jour une cellule et recalcule
+  /// Met à jour une cellule et recalcule (avec sync temps réel)
   Future<void> updateCell(String sheetName, String cellReference, dynamic value) async {
     if (_currentDocument == null) return;
 
@@ -76,28 +96,32 @@ class StrategyService extends ChangeNotifier {
         final updatedSheet = sheet.updateCell(cellReference, value);
         _currentDocument = _currentDocument!.updateSheet(sheetName, updatedSheet);
         
-        // Auto-sauvegarde
+        // ✅ Auto-sauvegarde Firebase (déclenche le stream automatiquement)
         await saveDocument();
-        notifyListeners();
+        // Note: notifyListeners() sera déclenché par le stream automatiquement
       }
     } catch (e) {
       _setError('Erreur de mise à jour: $e');
+      notifyListeners(); // Notify only on error
     } finally {
       _setLoading(false);
     }
   }
 
-  /// Recalcule toutes les formules
+  /// Recalcule toutes les formules (avec sync temps réel)
   Future<void> recalculateAll() async {
     if (_currentDocument == null) return;
 
     try {
       _setLoading(true);
       _currentDocument = _currentDocument!.recalculateAll();
+      
+      // ✅ Auto-sauvegarde Firebase (déclenche le stream automatiquement)
       await saveDocument();
-      notifyListeners();
+      // Note: notifyListeners() sera déclenché par le stream automatiquement
     } catch (e) {
       _setError('Erreur de recalcul: $e');
+      notifyListeners(); // Notify only on error
     } finally {
       _setLoading(false);
     }
@@ -742,10 +766,17 @@ class StrategyService extends ChangeNotifier {
     }
   }
 
-  /// Vider le cache et recharger
+  /// Vider le cache et recharger (force reload)
   Future<void> refresh() async {
     _currentDocument = null;
     _error = null;
+    _isInitialized = false; // ✅ Reset cache flag
+    await loadOrCreateDocument();
+  }
+
+  /// Force le rechargement depuis Firebase (bypass cache)
+  Future<void> forceReload() async {
+    _isInitialized = false;
     await loadOrCreateDocument();
   }
 

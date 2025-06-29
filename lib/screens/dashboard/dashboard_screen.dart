@@ -7,6 +7,7 @@ import '../../widgets/dashboard/racing_kart_grid_view.dart';
 import '../../widgets/dashboard/optimal_moment_indicator.dart';
 import '../../services/session_service.dart';
 import '../../services/circuit_service.dart';
+import '../../services/performance_indicator_service.dart';
 import '../../theme/racing_theme.dart';
 
 /// Dashboard (mobile & web) avec thème racing
@@ -29,10 +30,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   late AnimationController _headerController;
   late Animation<double> _headerAnimation;
 
-  // État de l'indicateur de performance
-  bool _isOptimal = false;
-  int _percentage = 0;
-  int _threshold = 100;
+  // Service pour la persistance de l'indicateur de performance
+  final PerformanceIndicatorService _performanceService = PerformanceIndicatorService();
   
 
   static const Map<String, Color> _nameToColor = {
@@ -56,6 +55,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
 
     _headerController.forward();
+    
+    // ✅ Initialiser le service de performance
+    _performanceService.loadInitialState();
+    
+    // ✅ Écouter le stream Firebase pour synchronisation temps réel
+    _performanceService.getPerformanceStream().listen((_) {
+      // Le service se met à jour automatiquement via notifyListeners()
+      // Pas besoin d'action supplémentaire ici
+    });
   }
 
   @override
@@ -74,11 +82,16 @@ class _DashboardScreenState extends State<DashboardScreen>
             opacity: _headerAnimation.value,
             child: Container(
               margin: const EdgeInsets.all(16),
-              child: OptimalMomentIndicator(
-                isOptimal: _isOptimal,
-                percentage: _percentage,
-                threshold: _threshold,
-                circuitName: circuitName,
+              child: ListenableBuilder(
+                listenable: _performanceService,
+                builder: (context, _) {
+                  return OptimalMomentIndicator(
+                    isOptimal: _performanceService.isOptimal,
+                    percentage: _performanceService.percentage,
+                    threshold: _performanceService.threshold,
+                    circuitName: circuitName,
+                  );
+                },
               ),
             ),
           ),
@@ -251,11 +264,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                   columnColors: colors,
                   readOnly: widget.readOnly,
                   onPerformanceUpdate: (isOptimal, percentage, threshold) {
-                    setState(() {
-                      _isOptimal = isOptimal;
-                      _percentage = percentage;
-                      _threshold = threshold;
-                    });
+                    // ✅ Mettre à jour le service au lieu de l'état local
+                    _performanceService.updatePerformance(isOptimal, percentage, threshold);
                   },
                 ),
               ),

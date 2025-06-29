@@ -13,20 +13,22 @@ class AppConfig {
     const String currentUrl = String.fromEnvironment('FLUTTER_WEB_BASE_URL', 
         defaultValue: 'http://localhost');
     
-    return currentUrl.contains('kmrs-racing.com') || 
-           currentUrl.contains('firebase') ||
-           const bool.fromEnvironment('dart.vm.product');
+    return const bool.fromEnvironment('dart.vm.product');
   }
   
   /// URL du backend selon l'environnement
-  static String get backendUrl {
-    return isProduction ? _prodBackendUrl : _devBackendUrl;
-  }
+      static String get backendUrl {
+        return isProduction
+            ? 'https://api.kmrs-racing.eu' // ← HTTPS au lieu de HTTP
+            : 'http://172.25.147.11:8001';
+      }
   
   /// URL WebSocket selon l'environnement
-  static String get wsUrl {
-    return isProduction ? _prodWsUrl : _devWsUrl;
-  }
+      static String get wsUrl {
+        return isProduction
+            ? 'ws://api.kmrs-racing.eu:8001'
+            : 'ws://172.25.147.11:8001';
+      }
   
   /// Configuration Firebase
   static const String firebaseProjectId = 'kartingapp-fef5c';

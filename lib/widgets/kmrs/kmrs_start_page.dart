@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import '../../services/kmrs_service.dart';
 import '../../services/session_service.dart';
@@ -363,31 +364,48 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
   }
 
   Widget _buildTeamManagementSection() {
-    final servicePilots = widget.kmrsService.currentSession?.pilots ?? [];
-    
-    return GlassmorphismSectionCardCompact(
-      title: 'Équipe de Pilotes',
-      subtitle: '${servicePilots.length} pilote${servicePilots.length > 1 ? 's' : ''} configuré${servicePilots.length > 1 ? 's' : ''}',
-      icon: Icons.people,
-      accentColor: Colors.teal,
-      children: [
-        ...servicePilots.asMap().entries.map((entry) {
-          final index = entry.key;
-          final pilot = entry.value;
-          return GlassmorphismPilotCard(
-            pilot: pilot,
-            index: index,
-            onEdit: () => _editPilot(index),
-            onDelete: () => _removePilot(index),
-            accentColor: Colors.teal,
-          );
-        }).toList(),
-        const SizedBox(height: 16),
-        GlassmorphismAddPilotButton(
-          onPressed: _addPilot,
-          accentColor: Colors.teal,
-        ),
-      ],
+    // ✅ Double réactivité : StreamBuilder + ListenableBuilder pour affichage instantané
+    return StreamBuilder<RaceSession?>(
+      stream: widget.kmrsService.getKmrsSessionStream(),
+      builder: (context, snapshot) {
+        return ListenableBuilder(
+          listenable: widget.kmrsService,
+          builder: (context, _) {
+            // Utiliser les données du cache service (optimistic) ou stream (confirmation)
+            final session = widget.kmrsService.currentSession ?? snapshot.data;
+            final servicePilots = session?.pilots ?? [];
+            
+            if (kDebugMode) {
+              print('🔧 TeamManagement: Rebuilding with ${servicePilots.length} pilots');
+            }
+            
+            return GlassmorphismSectionCardCompact(
+              title: 'Équipe de Pilotes',
+              subtitle: '${servicePilots.length} pilote${servicePilots.length > 1 ? 's' : ''} configuré${servicePilots.length > 1 ? 's' : ''}',
+              icon: Icons.people,
+              accentColor: Colors.teal,
+              children: [
+                ...servicePilots.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final pilot = entry.value;
+                  return GlassmorphismPilotCard(
+                    pilot: pilot,
+                    index: index,
+                    onEdit: () => _editPilot(index),
+                    onDelete: () => _removePilot(index),
+                    accentColor: Colors.teal,
+                  );
+                }).toList(),
+                const SizedBox(height: 16),
+                GlassmorphismAddPilotButton(
+                  onPressed: _addPilot,
+                  accentColor: Colors.teal,
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

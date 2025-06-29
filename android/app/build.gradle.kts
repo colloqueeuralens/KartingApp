@@ -10,7 +10,7 @@ plugins {
 
 android {
 
-    compileSdkVersion(34)
+    compileSdkVersion(35)
     ndkVersion = "27.0.12077973"
     namespace = "com.example.karting_app"
 

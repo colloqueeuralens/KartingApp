@@ -9,6 +9,7 @@ import '../../services/global_live_timing_service.dart';
 import '../../services/lap_statistics_service.dart';
 import '../../services/enhanced_lap_statistics_service.dart';
 import '../../services/debouncing_service.dart';
+import '../../services/performance_indicator_service.dart';
 import '../../models/lap_statistics_models.dart';
 import '../../theme/racing_theme.dart';
 import 'racing_kart_card.dart';
@@ -72,6 +73,9 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
   
   // Service d'état optimiste pour UI instantanée
   final OptimisticStateService _optimisticService = OptimisticStateService();
+  
+  // Service d'indicateur de performance pour persistance
+  final PerformanceIndicatorService _performanceService = PerformanceIndicatorService();
 
   @override
   void initState() {
@@ -814,8 +818,14 @@ class _RacingKartGridViewState extends State<RacingKartGridView>
               'performance_update',
               const Duration(milliseconds: 100), // Limite à 10 updates/sec max
               () {
-                if (mounted && widget.onPerformanceUpdate != null) {
-                  widget.onPerformanceUpdate!(isOpt, pct, threshold);
+                if (mounted) {
+                  // ✅ Mettre à jour le service de performance pour persistance
+                  _performanceService.updatePerformance(isOpt, pct, threshold);
+                  
+                  // Maintenir le callback pour compatibilité
+                  if (widget.onPerformanceUpdate != null) {
+                    widget.onPerformanceUpdate!(isOpt, pct, threshold);
+                  }
                 }
               },
             );
