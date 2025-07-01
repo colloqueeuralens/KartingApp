@@ -4,16 +4,19 @@ class AppConfig {
   static const String _devBackendUrl = 'http://172.25.147.11:8001';
   static const String _devWsUrl = 'ws://172.25.147.11:8001';
   
-  static const String _prodBackendUrl = 'https://api.kmrs-racing.com';
-  static const String _prodWsUrl = 'wss://api.kmrs-racing.com';
+  static const String _prodBackendUrl = 'https://api.kmrs-racing.eu';
+  static const String _prodWsUrl = 'wss://api.kmrs-racing.eu';
   
   /// Détermine automatiquement l'environnement
   static bool get isProduction {
-    // En production, l'URL contiendra votre domaine
+    // Détection de production basée sur l'URL ou le build
     const String currentUrl = String.fromEnvironment('FLUTTER_WEB_BASE_URL', 
         defaultValue: 'http://localhost');
     
-    return const bool.fromEnvironment('dart.vm.product');
+    // Production si on est sur le domaine kmrs-racing.eu ou build release
+    return currentUrl.contains('kmrs-racing.eu') || 
+           currentUrl.contains('web.app') ||
+           const bool.fromEnvironment('dart.vm.product');
   }
   
   /// URL du backend selon l'environnement
@@ -24,11 +27,11 @@ class AppConfig {
       }
   
   /// URL WebSocket selon l'environnement
-      static String get wsUrl {
-        return isProduction
-            ? 'ws://api.kmrs-racing.eu:8001'
-            : 'ws://172.25.147.11:8001';
-      }
+  static String get wsUrl {
+    return isProduction
+        ? 'wss://api.kmrs-racing.eu'      // ✅ WebSocket sécurisé via NGINX
+        : 'ws://172.25.147.11:8001';      // Dev local
+  }
   
   /// Configuration Firebase
   static const String firebaseProjectId = 'kartingapp-fef5c';

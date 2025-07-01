@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Backend FastAPI
+  api:
+    build: .
+    container_name: kmrs_api
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - DOMAIN=api.kmrs-racing.eu
+      - CORS_ORIGINS=https://kmrs-racing.eu,https://kartingapp-fef5c.web.app
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - kmrs_network
+    depends_on:
+      - redis
+      - postgres
+
+  # NGINX Reverse Proxy avec SSL
+  nginx:
+    image: nginx:alpine
+    container_name: kmrs_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/api.conf:/etc/nginx/conf.d/api.conf:ro
+      - ./ssl:/etc/ssl/certs:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - kmrs_network
+    depends_on:
+      - api
+
+  # Redis pour cache et sessions
+  redis:
+    image: redis:alpine
+    container_name: kmrs_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - kmrs_network
+
+  # PostgreSQL pour données persistantes
+  postgres:
+    image: postgres:15-alpine
+    container_name: kmrs_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks:
+      - kmrs_network
+
+  # Certbot pour SSL automatique
+  certbot:
+    image: certbot/certbot
+    container_name: kmrs_certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    command: certonly --webroot --webroot-path=/var/www/certbot --email admin@kmrs-racing.eu --agree-tos --no-eff-email -d api.kmrs-racing.eu
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  kmrs_network:
+    driver: bridge
