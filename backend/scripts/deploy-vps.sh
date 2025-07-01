@@ -5,6 +5,13 @@
 
 set -e
 
+# Se placer dans le répertoire backend pour les chemins relatifs
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$BACKEND_DIR"
+
+echo "🔧 Répertoire de travail: $(pwd)"
+
 DOMAIN=${1:-"kmrs-racing.eu"}
 VPS_IP=${2:-""}
 API_DOMAIN="api.$DOMAIN"
@@ -21,6 +28,15 @@ if [ -z "$VPS_IP" ]; then
 fi
 
 echo "📋 Vérification des prérequis..."
+
+# Vérifier les fichiers locaux
+echo "🔍 Vérification des fichiers locaux..."
+echo "• docker-compose.production.yml: $([ -f "docker-compose.production.yml" ] && echo "✅" || echo "❌")"
+echo "• nginx/nginx.conf: $([ -f "nginx/nginx.conf" ] && echo "✅" || echo "❌")"
+echo "• nginx/api.conf: $([ -f "nginx/api.conf" ] && echo "✅" || echo "❌")"
+echo "• app/: $([ -d "app" ] && echo "✅" || echo "❌")"
+echo "• Dockerfile: $([ -f "Dockerfile" ] && echo "✅" || echo "❌")"
+echo "• requirements.txt: $([ -f "requirements.txt" ] && echo "✅" || echo "❌")"
 
 # Vérifier que Docker est installé sur le VPS
 ssh root@$VPS_IP "docker --version" > /dev/null || {
@@ -50,9 +66,24 @@ scp .env.production.example root@$VPS_IP:/opt/kmrs-racing/.env.example
 
 # Copier le Dockerfile et les sources
 echo "📤 Upload du code source..."
-scp -r ../app root@$VPS_IP:/opt/kmrs-racing/
-scp ../Dockerfile root@$VPS_IP:/opt/kmrs-racing/
-scp ../requirements.txt root@$VPS_IP:/opt/kmrs-racing/
+if [ -d "app" ]; then
+    scp -r app root@$VPS_IP:/opt/kmrs-racing/
+else
+    echo "⚠️ Répertoire 'app' non trouvé, création d'un backend minimal..."
+    ssh root@$VPS_IP "mkdir -p /opt/kmrs-racing/app"
+fi
+
+if [ -f "Dockerfile" ]; then
+    scp Dockerfile root@$VPS_IP:/opt/kmrs-racing/
+else
+    echo "⚠️ Dockerfile non trouvé, utilisation du Dockerfile par défaut"
+fi
+
+if [ -f "requirements.txt" ]; then
+    scp requirements.txt root@$VPS_IP:/opt/kmrs-racing/
+else
+    echo "⚠️ requirements.txt non trouvé, création d'un fichier minimal"
+fi
 
 # Configuration SSL avec Let's Encrypt
 echo "🔒 Configuration SSL Let's Encrypt..."
