@@ -1,16 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_service.dart';
+import 'user_session_service.dart';
 
 class SessionService {
-  static final _sessionRef = FirebaseService.db
+  /// Référence vers la session de l'utilisateur actuel (user-specific)
+  static DocumentReference<Map<String, dynamic>> get _sessionRef {
+    final userSessionPath = UserSessionService.getUserSessionDoc();
+    return FirebaseService.db.doc(userSessionPath);
+  }
+
+  /// Support backward compatibility - référence vers l'ancien format
+  static final _legacySessionRef = FirebaseService.db
       .collection('sessions')
       .doc('session1');
 
   static Stream<DocumentSnapshot<Map<String, dynamic>>> getSessionStream() {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('getSessionStream');
     return _sessionRef.snapshots();
   }
 
   static Future<DocumentSnapshot<Map<String, dynamic>>> getSession() {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('getSession');
     return _sessionRef.get();
   }
 
@@ -20,6 +32,8 @@ class SessionService {
     required List<String> columnColors,
     String? selectedCircuitId,
   }) async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('updateConfiguration');
     await _sessionRef.set({
       'numColumns': numColumns,
       'numRows': numRows,
@@ -29,6 +43,8 @@ class SessionService {
   }
 
   static Future<void> clearKartEntries(int numColumns) async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('clearKartEntries');
     for (int i = 1; i <= numColumns; i++) {
       final entriesRef = _sessionRef
           .collection('columns')
@@ -45,6 +61,7 @@ class SessionService {
     int columnIndex, {
     int? limit = 10,
   }) {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
     final finalLimit = limit ?? 10;
 
     return _sessionRef
@@ -56,11 +73,14 @@ class SessionService {
         .snapshots()
         .map((snapshot) {
           // Diagnostic de performance simple
+          UserSessionService.logUserSession('getColumnStream');
           return snapshot;
         });
   }
 
   static Future<void> addKart(int columnIndex, int number, String perf) {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('addKart');
     return _sessionRef
         .collection('columns')
         .doc('col${columnIndex + 1}')
@@ -78,6 +98,8 @@ class SessionService {
     int number,
     String perf,
   ) {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('editKart');
     return _sessionRef
         .collection('columns')
         .doc('col${columnIndex + 1}')
@@ -87,6 +109,8 @@ class SessionService {
   }
 
   static Future<void> deleteKart(int columnIndex, String docId) {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('deleteKart');
     return _sessionRef
         .collection('columns')
         .doc('col${columnIndex + 1}')
@@ -102,9 +126,12 @@ class SessionService {
     int number,
     String perf,
   ) async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    UserSessionService.logUserSession('moveKart');
+    
     // Transaction optimisée pour réduire les événements de stream multiples
     await FirebaseService.db.runTransaction((transaction) async {
-      // Références des documents
+      // Références des documents (user-specific)
       final fromDocRef = _sessionRef
           .collection('columns')
           .doc('col${fromColumnIndex + 1}')

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'user_session_service.dart';
 
 /// Service pour la persistance de l'indicateur de performance KMRS
 /// Maintient l'état optimal/percentage/threshold entre les navigations
@@ -22,8 +23,10 @@ class PerformanceIndicatorService extends ChangeNotifier {
   int get threshold => _threshold;
   bool get isInitialized => _isInitialized;
 
-  /// Met à jour l'état de performance et le synchronise avec Firebase
+  /// Met à jour l'état de performance et le synchronise avec Firebase (user-specific)
   Future<void> updatePerformance(bool isOptimal, int percentage, int threshold) async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    
     // Éviter les mises à jour inutiles
     if (_isOptimal == isOptimal && 
         _percentage == percentage && 
@@ -43,14 +46,17 @@ class PerformanceIndicatorService extends ChangeNotifier {
     // Déclencher rebuild immédiat
     notifyListeners();
 
-    // Sauvegarder dans Firebase pour sync multi-plateformes
+    // Sauvegarder dans Firebase pour sync multi-plateformes (user-specific)
     try {
-      await _firestore.collection('performance_indicator').doc('kmrs_main_session').set({
+      final userPerformancePath = UserSessionService.getUserPerformanceDoc();
+      await _firestore.doc(userPerformancePath).set({
         'isOptimal': isOptimal,
         'percentage': percentage,
         'threshold': threshold,
         'lastUpdate': FieldValue.serverTimestamp(),
       });
+      
+      UserSessionService.logUserSession('updatePerformance');
     } catch (e) {
       if (kDebugMode) {
         print('📊 PerformanceIndicator: Firebase save error: $e');
@@ -58,13 +64,16 @@ class PerformanceIndicatorService extends ChangeNotifier {
     }
   }
 
-  /// Stream Firebase pour synchronisation temps réel multi-plateformes
+  /// Stream Firebase pour synchronisation temps réel multi-plateformes (user-specific)
   Stream<Map<String, dynamic>?> getPerformanceStream() {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    final userPerformancePath = UserSessionService.getUserPerformanceDoc();
+    
     if (kDebugMode) {
-      print('📊 PerformanceIndicator: Listening to Firebase stream');
+      print('📊 PerformanceIndicator: Listening to Firebase stream: $userPerformancePath');
     }
     
-    return _firestore.collection('performance_indicator').doc('kmrs_main_session').snapshots().map((doc) {
+    return _firestore.doc(userPerformancePath).snapshots().map((doc) {
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         
@@ -96,13 +105,16 @@ class PerformanceIndicatorService extends ChangeNotifier {
     });
   }
 
-  /// Charge l'état initial depuis Firebase ou utilise le cache
+  /// Charge l'état initial depuis Firebase ou utilise le cache (user-specific)
   Future<void> loadInitialState() async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    
     // Éviter les recharges multiples
     if (_isInitialized) return;
 
     try {
-      final doc = await _firestore.collection('performance_indicator').doc('kmrs_main_session').get();
+      final userPerformancePath = UserSessionService.getUserPerformanceDoc();
+      final doc = await _firestore.doc(userPerformancePath).get();
       
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -143,8 +155,10 @@ class PerformanceIndicatorService extends ChangeNotifier {
     }
   }
 
-  /// Reset de l'état (pour debug ou nettoyage)
+  /// Reset de l'état (pour debug ou nettoyage, user-specific)
   Future<void> reset() async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    
     _isOptimal = false;
     _percentage = 0;
     _threshold = 100;
@@ -152,7 +166,10 @@ class PerformanceIndicatorService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _firestore.collection('performance_indicator').doc('kmrs_main_session').delete();
+      final userPerformancePath = UserSessionService.getUserPerformanceDoc();
+      await _firestore.doc(userPerformancePath).delete();
+      
+      UserSessionService.logUserSession('resetPerformance');
       if (kDebugMode) {
         print('📊 PerformanceIndicator: Reset completed');
       }

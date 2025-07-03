@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================
+    // MULTI-USER SECURITY RULES
+    // ========================================
+    
+    // Circuits partagés (lecture pour tous, écriture authentifiée)
+    // Les circuits sont partagés entre tous les utilisateurs
+    match /circuits/{circuitId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // Secteur choices partagés (lecture pour tous, écriture authentifiée)
+    // Les choix de secteurs sont partagés entre tous les utilisateurs
+    match /secteur_choices/{document} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ========================================
+    // DONNÉES UTILISATEUR PRIVÉES
+    // ========================================
+    
+    // Toutes les données utilisateur sont privées et isolées
+    // Seul le propriétaire peut lire/écrire ses propres données
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Sessions kart utilisateur (/users/{userId}/sessions/*)
+    match /users/{userId}/sessions/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Colonnes et entrées des sessions kart
+      match /columns/{columnId}/entries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Sessions KMRS utilisateur (/users/{userId}/kmrs_sessions/*)
+    match /users/{userId}/kmrs_sessions/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Indicateurs de performance utilisateur (/users/{userId}/performance_indicator/*)
+    match /users/{userId}/performance_indicator/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // ========================================
+    // BACKWARD COMPATIBILITY (LEGACY)
+    // ========================================
+    
+    // Support temporaire pour les anciens chemins (migration douce)
+    // Ces règles seront supprimées après migration complète
+    match /sessions/{sessionId} {
+      allow read, write: if request.auth != null;
+      
+      match /columns/{columnId}/entries/{entryId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    match /kmrs_sessions/{sessionId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /performance_indicator/{sessionId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // ========================================
+    // SÉCURITÉ RENFORCÉE
+    // ========================================
+    
+    // Bloquer tout accès non autorisé
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

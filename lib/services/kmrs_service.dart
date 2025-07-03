@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/kmrs_models.dart';
+import 'user_session_service.dart';
 
 /// Service principal pour gérer les données KMRS
 /// Remplace StrategyService avec fonctionnalités spécifiques KMRS
@@ -43,13 +44,17 @@ class KmrsService extends ChangeNotifier {
   DateTime? get raceStartTime => _raceStartTime;
   Duration get elapsedTime => _elapsedTime;
 
-  /// Stream Firebase temps réel pour synchronisation multi-plateformes
+  /// Stream Firebase temps réel pour synchronisation multi-plateformes (user-specific)
   Stream<RaceSession?> getKmrsSessionStream([String? sessionId]) {
-    final docId = sessionId ?? 'kmrs_main_session'; // ✅ ID fixe pour sync multi-plateformes
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    final docId = sessionId ?? 'kmrs_main_session';
+    final userKmrsPath = UserSessionService.getUserKmrsDoc(docId);
+    
     if (kDebugMode) {
-      print('🔥 KmrsService: Listening to Firebase doc: $docId');
+      print('🔥 KmrsService: Listening to Firebase doc: $userKmrsPath');
     }
-    return _firestore.collection('kmrs_sessions').doc(docId).snapshots().map((doc) {
+    
+    return _firestore.doc(userKmrsPath).snapshots().map((doc) {
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         // ✅ Mettre à jour le cache local
@@ -57,6 +62,7 @@ class KmrsService extends ChangeNotifier {
         _isInitialized = true;
         _updateRacingData();
         
+        UserSessionService.logUserSession('getKmrsSessionStream');
         if (kDebugMode) {
           print('🔥 KmrsService: Firebase data received - ${_currentSession!.pilots.length} pilots');
         }
@@ -65,15 +71,17 @@ class KmrsService extends ChangeNotifier {
         return _currentSession;
       } else {
         if (kDebugMode) {
-          print('🔥 KmrsService: No Firebase data found for doc: $docId');
+          print('🔥 KmrsService: No Firebase data found for doc: $userKmrsPath');
         }
       }
       return null;
     });
   }
 
-  /// Charge ou crée une session KMRS (avec cache persistant)
+  /// Charge ou crée une session KMRS (avec cache persistant, user-specific)
   Future<void> loadOrCreateSession([String? sessionId]) async {
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
+    
     // ✅ Cache: Éviter les recharges si déjà initialisé
     if (_isInitialized && _currentSession != null) {
       return;
@@ -83,14 +91,23 @@ class KmrsService extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      final docId = sessionId ?? 'kmrs_main_session'; // ✅ ID fixe pour sync multi-plateformes
-      final doc = await _firestore.collection('kmrs_sessions').doc(docId).get();
+      final docId = sessionId ?? 'kmrs_main_session';
+      final userKmrsPath = UserSessionService.getUserKmrsDoc(docId);
+      final doc = await _firestore.doc(userKmrsPath).get();
+      
+      UserSessionService.logUserSession('loadOrCreateSession');
       
       if (doc.exists && doc.data() != null) {
         _currentSession = RaceSession.fromMap(doc.data()!);
+        if (kDebugMode) {
+          print('🔥 KmrsService: Loaded existing session for user');
+        }
       } else {
         _currentSession = _createDefaultSession();
         await saveSession();
+        if (kDebugMode) {
+          print('🔥 KmrsService: Created new session for user');
+        }
       }
       
       _isInitialized = true; // ✅ Marquer comme initialisé
@@ -103,15 +120,21 @@ class KmrsService extends ChangeNotifier {
     }
   }
 
-  /// Sauvegarde la session dans Firebase
+  /// Sauvegarde la session dans Firebase (user-specific)
   Future<bool> saveSession() async {
     if (_currentSession == null) return false;
+    UserSessionService.ensureAuthenticated(); // Vérification sécurité
 
     try {
+      final userKmrsPath = UserSessionService.getUserKmrsDoc(_currentSession!.id);
+      
       if (kDebugMode) {
-        print('💾 KmrsService: Saving to Firebase doc: ${_currentSession!.id} - ${_currentSession!.pilots.length} pilots');
+        print('💾 KmrsService: Saving to Firebase doc: $userKmrsPath - ${_currentSession!.pilots.length} pilots');
       }
-      await _firestore.collection('kmrs_sessions').doc(_currentSession!.id).set(_currentSession!.toMap());
+      
+      await _firestore.doc(userKmrsPath).set(_currentSession!.toMap());
+      UserSessionService.logUserSession('saveSession');
+      
       if (kDebugMode) {
         print('💾 KmrsService: Save successful');
       }
@@ -474,9 +497,10 @@ class KmrsService extends ChangeNotifier {
   }
 
   RaceSession _createDefaultSession() {
+    final userId = UserSessionService.getCurrentUserId();
     return RaceSession(
-      id: 'kmrs_main_session', // ✅ ID fixe pour synchronisation multi-plateformes
-      sessionName: 'Session KMRS ${DateTime.now().day}/${DateTime.now().month}',
+      id: 'kmrs_main_session', // ✅ ID de session fixe mais stocké dans user-specific path
+      sessionName: 'Session KMRS ${DateTime.now().day}/${DateTime.now().month} (User: ${userId.substring(0, 8)})',
       createdAt: DateTime.now(),
       circuitName: 'Circuit par défaut',
       pilots: [], // Commencer avec aucun pilote par défaut
