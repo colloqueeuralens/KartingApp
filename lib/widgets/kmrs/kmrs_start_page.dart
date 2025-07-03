@@ -44,6 +44,10 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
   // 2 inputs complémentaires
   final _sessionNameController = TextEditingController();            // Nom de session
   final _trackNameController = TextEditingController();              // Nom du circuit
+  
+  // Pitstop Fix Duration (mm:ss)
+  final _pitstopFixMinutesController = TextEditingController();      // Pitstop Fix - Minutes
+  final _pitstopFixSecondsController = TextEditingController();      // Pitstop Fix - Secondes
 
   // Race Duration comme dropdown (1-30 heures)
   double _raceDurationHours = 4.0;
@@ -69,6 +73,10 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
     // Controllers complémentaires
     _sessionNameController.dispose();
     _trackNameController.dispose();
+    
+    // Controllers Pitstop Fix
+    _pitstopFixMinutesController.dispose();
+    _pitstopFixSecondsController.dispose();
     super.dispose();
   }
 
@@ -93,6 +101,10 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
       _pitLaneClosedEndController.text = _config.pitLaneClosedEndMinutes.toString();
       _tempsRoulageMinController.text = _config.tempsRoulageMinPilote.toString();
       _tempsRoulageMaxController.text = _config.tempsRoulageMaxPilote.toString();
+      
+      // Pitstop Fix Duration (mm:ss)
+      _pitstopFixMinutesController.text = _config.pitstopFixDuration.inMinutes.toString();
+      _pitstopFixSecondsController.text = (_config.pitstopFixDuration.inSeconds % 60).toString();
     } else {
       _config = RaceConfiguration.defaultConfig();
       await _initializeDefaultValues();
@@ -114,6 +126,10 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
     _pitLaneClosedEndController.text = '15';      // 15 min fermé fin
     _tempsRoulageMinController.text = '120';      // 120 min minimum par pilote
     _tempsRoulageMaxController.text = '240';      // 240 min maximum par pilote
+    
+    // Pitstop Fix Duration par défaut (02:00)
+    _pitstopFixMinutesController.text = '2';      // 2 minutes par défaut
+    _pitstopFixSecondsController.text = '0';      // 0 secondes par défaut
   }
 
   @override
@@ -289,15 +305,62 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
         ),
         const SizedBox(height: 20),
         
-        // Arrêts obligatoires
-        GlassmorphismInputField(
-          label: 'Arrêts obligatoires',
-          controller: _requiredPitstopsController,
-          icon: Icons.local_gas_station,
-          hint: 'Nombre d\'arrêts requis',
-          inputType: TextInputType.number,
-          accentColor: Colors.orange,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        // Arrêts obligatoires + Pitstop Fix Duration
+        Row(
+          children: [
+            Expanded(
+              child: GlassmorphismInputField(
+                label: 'Arrêts obligatoires',
+                controller: _requiredPitstopsController,
+                icon: Icons.local_gas_station,
+                hint: 'Nombre d\'arrêts requis',
+                inputType: TextInputType.number,
+                accentColor: Colors.orange,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: GlassmorphismInputField(
+                      label: 'Pitstop Fix (min)',
+                      controller: _pitstopFixMinutesController,
+                      icon: Icons.timer,
+                      hint: '2',
+                      inputType: TextInputType.number,
+                      accentColor: Colors.orange,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: GlassmorphismInputField(
+                      label: 'Pitstop Fix (sec)',
+                      controller: _pitstopFixSecondsController,
+                      icon: Icons.timer_outlined,
+                      hint: '00',
+                      inputType: TextInputType.number,
+                      accentColor: Colors.orange,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: (value) {
+                        if (value != null && value.isNotEmpty) {
+                          final seconds = int.tryParse(value);
+                          if (seconds != null && (seconds < 0 || seconds > 59)) {
+                            return 'Secondes: 0-59';
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 20),
         
@@ -748,7 +811,10 @@ class _KmrsStartPageState extends State<KmrsStartPage> {
         requiredPitstops: int.tryParse(_requiredPitstopsController.text) ?? 7,
         pitLaneClosedStartMinutes: int.tryParse(_pitLaneClosedStartController.text) ?? 15,
         pitLaneClosedEndMinutes: int.tryParse(_pitLaneClosedEndController.text) ?? 15,
-        pitstopFixDuration: const Duration(minutes: 2), // Valeur fixe par défaut
+        pitstopFixDuration: Duration(
+          minutes: int.tryParse(_pitstopFixMinutesController.text) ?? 2,
+          seconds: int.tryParse(_pitstopFixSecondsController.text) ?? 0,
+        ), // Valeur configurable par l'utilisateur
         tempsRoulageMinPilote: int.tryParse(_tempsRoulageMinController.text) ?? 120,
         tempsRoulageMaxPilote: int.tryParse(_tempsRoulageMaxController.text) ?? 240,
         
